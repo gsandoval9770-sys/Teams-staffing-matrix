@@ -6,7 +6,7 @@
   <title>Clinic Team Builder — Nevada Eye Associates</title>
   <meta name="description" content="Ophthalmic technician team builder for Nevada Eye Associates / Meadows Eye. Assign techs to doctor teams with drag-and-drop, coverage thresholds, and mismatch warnings." />
   <!--
-    Clinic Team Builder — Nevada Eye Associates
+    Clinic Team Builder — Meadows Eye
     ════════════════════════════════════════════
     Single-file tool. No build step. Works in Chrome.
     To use: open index.html (or this file) in any modern browser.
@@ -19,6 +19,10 @@
   -->
   <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- Firebase SDK (compat v10 — no build step needed) -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #1a1a1a; height: 100vh; overflow: hidden; }
@@ -186,21 +190,99 @@
       .print-header p  { font-size: 11px; color: #666; margin-top: 3px; }
     }
     .print-header { display: none; }
+
+    /* ── Google Sync ── */
+    .sync-btn { display:flex; align-items:center; gap:6px; padding:5px 11px; border-radius:7px; font-size:11px; font-weight:600; cursor:pointer; border:1px solid; transition:all .15s; white-space:nowrap; }
+    .sync-offline { background:#fff; color:#374151; border-color:#d1d5db; }
+    .sync-offline:hover { background:#f9fafb; border-color:#9ca3af; }
+    .sync-connected { background:#F0FDF4; color:#15803d; border-color:#86EFAC; font-weight:700; }
+    .sync-connected:hover { background:#DCFCE7; }
+    .sync-syncing { background:#EFF6FF; color:#1D4ED8; border-color:#BFDBFE; }
+    .sync-error { background:#FEF2F2; color:#991B1B; border-color:#FECACA; }
+    .sync-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
+    .dot-offline { background:#9ca3af; }
+    .dot-ok { background:#16a34a; }
+    .dot-busy { background:#2563eb; animation:pulse .9s infinite; }
+    .dot-error { background:#dc2626; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+    .sync-user { font-size:10px; color:#6b7280; max-width:140px; overflow:hidden; text-overflow:ellipsis; }
+    .setup-banner { background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; padding:10px 14px; margin:10px 14px 0; font-size:12px; color:#92400E; display:flex; align-items:flex-start; gap:8px; }
+    .setup-banner a { color:#1D4ED8; text-decoration:underline; }
+    .drive-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; z-index:200; }
+    .drive-modal { background:#fff; border-radius:14px; padding:24px; width:440px; box-shadow:0 20px 60px rgba(0,0,0,.25); }
+    .drive-modal h3 { font-size:16px; font-weight:700; margin-bottom:6px; }
+    .drive-modal p { font-size:13px; color:#374151; margin-bottom:16px; line-height:1.5; }
+    .drive-modal-btns { display:flex; gap:8px; justify-content:flex-end; }
+    .dm-primary { background:#185FA5; color:#fff; border-color:#185FA5; font-weight:600; font-size:13px; padding:7px 16px; }
+    .dm-primary:hover { background:#1451a0; }
+    .dm-secondary { font-size:13px; padding:7px 16px; }
   </style>
 </head>
 <body>
 <div id="root"></div>
 
 <script>
-const { useState, useRef, Fragment } = React;
+const { useState, useRef, useEffect, useCallback, Fragment } = React;
 
 /* ─── localStorage helpers ──────────────────────────────────── */
 const STORAGE_KEY = 'neya-team-builder-v2';
+
+/* ─── Passcode ───────────────────────────────────────────────────
+   Change APP_PASSCODE to whatever passcode you want staff to use.
+   The unlock is remembered in localStorage when "Remember this
+   device" is checked, or only for the session when unchecked.    */
+const APP_PASSCODE    = 'meadows1';      // ← change this
+const UNLOCK_LS_KEY   = 'neya-unlocked';
+const isAlreadyOpen   = () => localStorage.getItem(UNLOCK_LS_KEY) === '1' || sessionStorage.getItem(UNLOCK_LS_KEY) === '1';
 function loadSaved() {
   try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch { return {}; }
 }
 function saveState(docs, techs) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ docs, techs, savedAt: new Date().toISOString() })); } catch {}
+}
+
+/* ─── Firebase / Firestore config ───────────────────────────── */
+/*
+  FIRESTORE RULES — paste these in Firebase Console → Firestore → Rules:
+  ─────────────────────────────────────────────────────────────────────
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
+      match /teamBuilder/{doc} {
+        allow read, write: if request.auth != null;
+      }
+    }
+  }
+  ─────────────────────────────────────────────────────────────────────
+*/
+
+// !! REPLACE with your Firebase project config (Project Settings → General → Your apps) !!
+const FIREBASE_CONFIG = {
+  apiKey:            'AIzaSyBk5CZtGdTA9O2id_C_QCoi3Jp72uKK_r0',
+  authDomain:        'team-builder-73ec4.firebaseapp.com',
+  projectId:         'team-builder-73ec4',
+  storageBucket:     'team-builder-73ec4.firebasestorage.app',
+  messagingSenderId: '148364566179',
+  appId:             '1:148364566179:web:7cdab59687a9bbf5916916',
+  measurementId:     'G-L9ZXLVCQ7N',
+};
+
+const FIRESTORE_COLLECTION = 'teamBuilder';
+const FIRESTORE_DOC_ID     = 'shared';        // all signed-in users share this document
+
+/* ─── Firebase initialiser (safe to call multiple times) ─────── */
+let _db = null, _auth = null;
+function getFirebase() {
+  if (_db && _auth) return { db: _db, auth: _auth };
+  if (!window.firebase || !FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY') return null;
+  try {
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    _db   = firebase.firestore();
+    _auth = firebase.auth();
+    // Enable offline persistence so the app works briefly without internet
+    _db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+    return { db: _db, auth: _auth };
+  } catch { return null; }
 }
 
 /* ─── Constants ─────────────────────────────────────────────── */
@@ -354,8 +436,90 @@ function BadgeLabel({ level, count, target }) {
   return `✓ ${count}/${target}`;
 }
 
+/* ─── Lock Screen component ─────────────────────────────────── */
+function LockScreen({ onUnlock }) {
+  const [input,    setInput]   = React.useState('');
+  const [show,     setShow]    = React.useState(false);
+  const [error,    setError]   = React.useState('');
+  const [shake,    setShake]   = React.useState(false);
+  const [remember, setRemember]= React.useState(true);
+  const inputRef = React.useRef(null);
+
+  React.useEffect(() => { inputRef.current?.focus(); }, []);
+
+  const attempt = () => {
+    if (input === APP_PASSCODE) {
+      if (remember) localStorage.setItem(UNLOCK_LS_KEY, '1');
+      else          sessionStorage.setItem(UNLOCK_LS_KEY, '1');
+      onUnlock();
+    } else {
+      setError('Incorrect passcode — please try again.');
+      setShake(true);
+      setInput('');
+      setTimeout(() => { setShake(false); setError(''); inputRef.current?.focus(); }, 1600);
+    }
+  };
+
+  const handleKey = e => { if (e.key === 'Enter') attempt(); };
+
+  return React.createElement('div', { className: 'lock-screen' },
+    React.createElement('div', { className: 'lock-card' },
+      React.createElement('div', { className: 'lock-logo' }, '👁'),
+      React.createElement('div', { className: 'lock-title' }, 'Nevada Eye Associates'),
+      React.createElement('div', { className: 'lock-sub' }, 'Clinic Team Builder — Staff Access Only'),
+
+      React.createElement('div', { className: 'lock-input-wrap' },
+        React.createElement('input', {
+          ref:         inputRef,
+          className:   `lock-input${error ? ' error' : ''}${shake ? ' shake' : ''}`,
+          type:        show ? 'text' : 'password',
+          placeholder: 'Enter passcode',
+          value:       input,
+          onChange:    e => setInput(e.target.value),
+          onKeyDown:   handleKey,
+          autoComplete:'off',
+          spellCheck:  false,
+        }),
+        React.createElement('button', {
+          className: 'lock-eye',
+          onClick:   () => setShow(p => !p),
+          tabIndex:  -1,
+          title:     show ? 'Hide passcode' : 'Show passcode',
+        }, show ? '🙈' : '👁')
+      ),
+
+      React.createElement('div', { className: 'lock-error' }, error),
+
+      React.createElement('button', {
+        className: 'lock-btn',
+        onClick:   attempt,
+        disabled:  !input,
+      }, 'Unlock →'),
+
+      React.createElement('label', { className: 'lock-remember' },
+        React.createElement('input', {
+          type:     'checkbox',
+          checked:  remember,
+          onChange: e => setRemember(e.target.checked),
+        }),
+        'Remember this device'
+      ),
+
+      React.createElement('div', { className: 'lock-footer' },
+        'Meadows Eye Associates · Nevada Eye Associates'
+      )
+    )
+  );
+}
+
+
 /* ─── Main App ──────────────────────────────────────────────── */
 function App() {
+  const [unlocked, setUnlocked] = useState(isAlreadyOpen);
+
+  // Show lock screen until correct passcode entered
+  if (!unlocked) return React.createElement(LockScreen, { onUnlock: () => setUnlocked(true) });
+
   const _saved = loadSaved();
   const [docs,       setDocs]       = useState(_saved.docs  || DOCS_SEED);
   const [techs,      setTechs]      = useState(_saved.techs || TECHS_SEED);
@@ -372,15 +536,127 @@ function App() {
   const [newT,       setNewT]       = useState({ name:'', cred:'', l1:'', l2:'', l3:'', types:[], travel:false, scribes:false });
   const [toast,      setToast]      = useState('');
 
-  const fileRef = useRef(null);
+  /* ── Firestore real-time sync state ── */
+  const [syncStatus,  setSyncStatus] = useState('offline'); // offline|connecting|syncing|synced|error
+  const [gUser,       setGUser]      = useState(null);      // {name, email, picture, uid}
+  const [lastSyncBy,  setLastSyncBy] = useState(null);      // who last updated: {name, at}
+  const isConfigured = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_API_KEY';
 
-  /* toast helper */
-  const showToast = msg => { setToast(msg); setTimeout(()=>setToast(''), 2600); };
+  const syncTimerRef    = useRef(null);
+  const isSavingRef     = useRef(false);   // suppress echo from own writes
+  const unsubListenRef  = useRef(null);    // Firestore onSnapshot unsubscribe
+  const unsubAuthRef    = useRef(null);    // Auth onAuthStateChanged unsubscribe
 
-  /* Auto-save to localStorage on every docs/techs change */
-  const saveDocsAndTechs = (nextDocs, nextTechs) => saveState(nextDocs, nextTechs);
-  const updateDocs = fn => setDocs(prev => { const next = typeof fn === 'function' ? fn(prev) : fn; saveDocsAndTechs(next, techs); return next; });
-  const updateTechs = fn => setTechs(prev => { const next = typeof fn === 'function' ? fn(prev) : fn; saveDocsAndTechs(docs, next); return next; });
+  /* ── Firestore write (debounced 800 ms) ── */
+  const scheduleFirestoreSave = useCallback((nextDocs, nextTechs) => {
+    const fb = getFirebase();
+    if (!fb || !_auth?.currentUser) return;
+    setSyncStatus('syncing');
+    clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(async () => {
+      try {
+        isSavingRef.current = true;
+        const user = _auth.currentUser;
+        await _db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC_ID).set({
+          docs:          nextDocs,
+          techs:         nextTechs,
+          updatedAt:     firebase.firestore.FieldValue.serverTimestamp(),
+          updatedByUid:  user.uid,
+          updatedByName: user.displayName || user.email,
+        });
+        setSyncStatus('synced');
+      } catch (e) {
+        isSavingRef.current = false;
+        setSyncStatus('error');
+      }
+    }, 800);
+  }, []);
+
+  /* ── Attach Firestore real-time listener ── */
+  const attachListener = useCallback((user) => {
+    if (unsubListenRef.current) unsubListenRef.current(); // detach previous
+    const ref = _db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC_ID);
+    unsubListenRef.current = ref.onSnapshot(snap => {
+      if (!snap.exists) {
+        // First time — upload local data to Firestore
+        const saved = loadSaved();
+        const payload = {
+          docs:          saved.docs  || DOCS_SEED,
+          techs:         saved.techs || TECHS_SEED,
+          updatedAt:     firebase.firestore.FieldValue.serverTimestamp(),
+          updatedByUid:  user.uid,
+          updatedByName: user.displayName || user.email,
+        };
+        isSavingRef.current = true;
+        ref.set(payload).catch(() => { isSavingRef.current = false; });
+        setSyncStatus('synced');
+        showToast('✅ Connected to Firestore — your data has been uploaded.');
+        return;
+      }
+
+      // Suppress echo from our own writes
+      if (isSavingRef.current) { isSavingRef.current = false; setSyncStatus('synced'); return; }
+
+      const data = snap.data();
+      if (data.docs && data.techs) {
+        setDocs(data.docs);
+        setTechs(data.techs);
+        saveState(data.docs, data.techs);
+        setSyncStatus('synced');
+        if (data.updatedByUid && data.updatedByUid !== user.uid) {
+          const name = data.updatedByName || 'Someone';
+          const at   = data.updatedAt?.toDate ? data.updatedAt.toDate().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
+          setLastSyncBy({ name, at });
+          showToast(`🔄 Schedule updated by ${name}${at ? ' at ' + at : ''}`);
+        } else {
+          setLastSyncBy(null);
+        }
+      }
+    }, () => setSyncStatus('error'));
+  }, []);
+
+  /* ── Firebase Auth state listener (init on mount) ── */
+  useEffect(() => {
+    if (!isConfigured) return;
+    const fb = getFirebase();
+    if (!fb) return;
+
+    unsubAuthRef.current = _auth.onAuthStateChanged(user => {
+      if (user) {
+        setGUser({ name: user.displayName, email: user.email, picture: user.photoURL, uid: user.uid });
+        setSyncStatus('connecting');
+        attachListener(user);
+      } else {
+        setGUser(null);
+        setSyncStatus('offline');
+        if (unsubListenRef.current) { unsubListenRef.current(); unsubListenRef.current = null; }
+      }
+    });
+
+    return () => {
+      if (unsubAuthRef.current)  unsubAuthRef.current();
+      if (unsubListenRef.current) unsubListenRef.current();
+      clearTimeout(syncTimerRef.current);
+    };
+  }, [attachListener]);
+
+  /* ── Auth actions ── */
+  const handleSignIn = async () => {
+    const fb = getFirebase();
+    if (!fb) return;
+    try {
+      const provider = new firebase.auth.GoogleAuthProvider();
+      await _auth.signInWithPopup(provider);
+    } catch { showToast('Sign-in failed — please try again.'); }
+  };
+
+  const handleSignOut = async () => {
+    clearTimeout(syncTimerRef.current);
+    if (unsubListenRef.current) { unsubListenRef.current(); unsubListenRef.current = null; }
+    if (_auth) await _auth.signOut();
+    setGUser(null); setLastSyncBy(null); setSyncStatus('offline');
+    showToast('Signed out of Firestore sync.');
+  };
 
   /* derived */
   const pool = techs.filter(t =>
@@ -473,6 +749,7 @@ function App() {
         if (data.docs && data.techs) {
           setDocs(data.docs); setTechs(data.techs);
           saveState(data.docs, data.techs);
+          scheduleFirestoreSave(data.docs, data.techs);
           setSchedOpen(null); setEditLocs(null); setDrag(null);
           showToast('Schedule imported successfully.');
         } else { alert('Invalid file — please use a file exported from this tool.'); }
@@ -487,6 +764,7 @@ function App() {
     if (!window.confirm('Reset all team assignments and schedules to defaults?')) return;
     setDocs(DOCS_SEED); setTechs(TECHS_SEED);
     saveState(DOCS_SEED, TECHS_SEED);
+    scheduleFirestoreSave(DOCS_SEED, TECHS_SEED);
     setSchedOpen(null); setEditLocs(null); setDrag(null);
     showToast('Reset to defaults.');
   };
@@ -501,6 +779,29 @@ function App() {
     React.createElement('div', {className:'print-header'},
       React.createElement('h1', null, 'Nevada Eye Associates — Clinic Team Builder'),
       React.createElement('p', null, 'Printed on ' + new Date().toLocaleDateString('en-US', {weekday:'long',year:'numeric',month:'long',day:'numeric'}))
+    ),
+
+    /* Setup banner — shown when Firebase config not yet filled in */
+    !isConfigured && React.createElement('div', {className:'setup-banner'},
+      React.createElement('span', null, '⚙️'),
+      React.createElement('span', null,
+        'Firestore sync is not yet configured. ',
+        React.createElement('a', {href:'https://console.firebase.google.com', target:'_blank'}, 'Open Firebase Console'),
+        ', create a project, enable Firestore + Google Auth, then paste your ',
+        React.createElement('strong', null, 'firebaseConfig'),
+        ' into the FIREBASE_CONFIG constant at the top of this file.'
+      )
+    ),
+
+    /* "Last updated by" banner — shown after remote sync */
+    (gUser && lastSyncBy) && React.createElement('div', {className:'setup-banner', style:{background:'#EFF6FF',borderColor:'#BFDBFE',color:'#1E40AF',margin:'8px 14px 0'}},
+      React.createElement('span', null, '🔄'),
+      React.createElement('span', null,
+        'Schedule updated by ',
+        React.createElement('strong', null, lastSyncBy.name),
+        lastSyncBy.at ? ' at ' + lastSyncBy.at : '',
+        ' — all changes synced in real time.'
+      )
     ),
 
     /* HEADER */
@@ -522,7 +823,33 @@ function App() {
         )
       ),
       React.createElement('div', {className:'header-divider'}),
-      React.createElement('div', {style:{display:'flex',gap:6}},
+      React.createElement('div', {style:{display:'flex',gap:6,alignItems:'center'}},
+        /* Firestore real-time sync button */
+        !gUser
+          ? React.createElement('button', {
+              className: 'sync-btn sync-offline',
+              onClick:   handleSignIn,
+              title:     isConfigured ? 'Sign in with Google to enable real-time Firestore sync' : 'Configure FIREBASE_CONFIG first',
+              disabled:  !isConfigured,
+              style:     !isConfigured ? {opacity:.5,cursor:'not-allowed'} : {},
+            },
+              React.createElement('div', {className:'sync-dot dot-offline'}),
+              '🔴 Sign in to sync'
+            )
+          : React.createElement('div', {style:{display:'flex',alignItems:'center',gap:6}},
+              React.createElement('button', {
+                className: 'sync-btn ' + (syncStatus==='syncing'||syncStatus==='connecting'?'sync-syncing':syncStatus==='error'?'sync-error':'sync-connected'),
+                title:     `Signed in as ${gUser.email} — click to sign out`,
+                onClick:   handleSignOut,
+              },
+                React.createElement('div', {className:'sync-dot ' + (syncStatus==='syncing'||syncStatus==='connecting'?'dot-busy':syncStatus==='error'?'dot-error':'dot-ok')}),
+                syncStatus==='connecting'?'🔄 Connecting…':syncStatus==='syncing'?'🔄 Saving…':syncStatus==='error'?'⚠ Sync error':'🟢 Live synced'
+              ),
+              gUser.picture && React.createElement('img', {src:gUser.picture, style:{width:22,height:22,borderRadius:'50%',border:'2px solid #d1d5db'}, title:gUser.email}),
+              React.createElement('span', {className:'sync-user', title:gUser.email}, gUser.name||gUser.email)
+            ),
+
+        React.createElement('div', {style:{width:1,height:20,background:'#e5e7eb',margin:'0 2px'}}),
         React.createElement('button', {className:'io-btn import-btn', onClick:()=>fileRef.current.click()}, '↑ Import'),
         React.createElement('button', {className:'io-btn export-btn', onClick:handleExport}, '↓ Export'),
         React.createElement('button', {className:'io-btn', style:{color:'#374151'}, onClick:()=>window.print()}, '🖨 Print'),
