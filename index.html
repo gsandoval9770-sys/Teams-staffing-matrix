@@ -1,922 +1,742 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Clinic Team Builder — Nevada Eye Associates</title>
-  <meta name="description" content="Ophthalmic technician team builder for Nevada Eye Associates / Meadows Eye. Assign techs to doctor teams with drag-and-drop, coverage thresholds, and mismatch warnings." />
-  <!--
-    Clinic Team Builder — Nevada Eye Associates
-    ════════════════════════════════════════════
-    Single-file tool. No build step. Works in Chrome.
-    To use: open index.html (or this file) in any modern browser.
-    To host: push to GitHub → Settings → Pages → select branch/root.
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Clinic Team Builder — Nevada Eye Associates</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f2f5;color:#1a1a1a;height:100vh;overflow:hidden}
+#root{display:flex;flex-direction:column;height:100vh}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#ccc;border-radius:99px}
+input[type="text"],input[type="search"],select{font-family:inherit;font-size:12px;border:1px solid #d1d5db;border-radius:6px;padding:5px 9px;background:#fff;color:#1a1a1a;transition:border-color .15s;width:100%;outline:none}
+input[type="text"]:focus,select:focus{border-color:#185FA5;box-shadow:0 0 0 3px rgba(24,95,165,0.1)}
+button{font-family:inherit;font-size:12px;border:1px solid #d1d5db;border-radius:6px;padding:5px 12px;background:#fff;color:#374151;cursor:pointer;transition:background .12s,border-color .12s;outline:none}
+button:hover{background:#f3f4f6}button:active{transform:scale(.98)}
+input[type="checkbox"]{accent-color:#185FA5;cursor:pointer}
 
-    Dependencies (loaded from CDN — internet required on first load):
-      • React 18  (react.production.min.js)
-      • ReactDOM 18 (react-dom.production.min.js)
-    Both are cached by the browser after first load.
-  -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <!-- Firebase SDK (compat v10 — no build step needed) -->
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
-  <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #1a1a1a; height: 100vh; overflow: hidden; }
-    #root { display: flex; flex-direction: column; height: 100vh; }
-    ::-webkit-scrollbar { width: 5px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: #ccc; border-radius: 99px; }
+/* Header */
+.header{padding:10px 18px;background:#fff;border-bottom:1px solid #e5e7eb;display:flex;align-items:center;gap:14px;flex-shrink:0;box-shadow:0 1px 4px rgba(0,0,0,.06);flex-wrap:wrap}
+.header-brand{font-size:16px;font-weight:700;color:#111827;letter-spacing:-.3px}
+.header-sub{font-size:11px;color:#9ca3af;margin-top:1px}
+.stat-box{text-align:center;min-width:60px}
+.stat-val{font-size:20px;font-weight:700;line-height:1}
+.stat-lbl{font-size:10px;color:#9ca3af;margin-top:3px;text-transform:uppercase;letter-spacing:.04em}
+.header-divider{width:1px;height:36px;background:#e5e7eb}
+.io-btn{display:flex;align-items:center;gap:5px;font-size:12px;padding:6px 12px;border-radius:7px;font-weight:500}
+.export-btn{background:#185FA5;color:#fff;border-color:#185FA5}
+.export-btn:hover{background:#1451a0}
 
-    input[type="text"], input[type="search"], select {
-      font-family: inherit; font-size: 12px;
-      border: 1px solid #d1d5db; border-radius: 6px;
-      padding: 5px 9px; background: #fff; color: #1a1a1a;
-      transition: border-color 0.15s; width: 100%; outline: none;
-    }
-    input[type="text"]:focus, select:focus { border-color: #185FA5; box-shadow: 0 0 0 3px rgba(24,95,165,0.1); }
-    button {
-      font-family: inherit; font-size: 12px;
-      border: 1px solid #d1d5db; border-radius: 6px;
-      padding: 5px 12px; background: #fff; color: #374151;
-      cursor: pointer; transition: background 0.12s, border-color 0.12s; outline: none;
-    }
-    button:hover { background: #f3f4f6; }
-    button:active { transform: scale(0.98); }
-    input[type="checkbox"] { accent-color: #185FA5; cursor: pointer; }
+/* Sync button */
+.sync-btn{display:flex;align-items:center;gap:6px;padding:5px 11px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;border:1px solid;transition:all .15s;white-space:nowrap}
+.sync-offline{background:#fff;color:#374151;border-color:#d1d5db}
+.sync-connected{background:#F0FDF4;color:#15803d;border-color:#86EFAC;font-weight:700}
+.sync-connected:hover{background:#DCFCE7}
+.sync-syncing{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.sync-error{background:#FEF2F2;color:#991B1B;border-color:#FECACA}
+.sync-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.dot-offline{background:#9ca3af}.dot-ok{background:#16a34a}.dot-error{background:#dc2626}
+.dot-busy{background:#2563eb;animation:pulse .9s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.sync-user{font-size:10px;color:#6b7280;max-width:160px;overflow:hidden;text-overflow:ellipsis}
 
-    /* Header */
-    .header { padding: 10px 18px; background: #fff; border-bottom: 1px solid #e5e7eb; display: flex; align-items: center; gap: 14px; flex-shrink: 0; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
-    .header-brand { font-size: 16px; font-weight: 700; color: #111827; letter-spacing: -0.3px; }
-    .header-sub { font-size: 11px; color: #9ca3af; margin-top: 1px; }
-    .stat-box { text-align: center; min-width: 64px; }
-    .stat-val { font-size: 20px; font-weight: 700; line-height: 1; }
-    .stat-lbl { font-size: 10px; color: #9ca3af; margin-top: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
-    .header-divider { width: 1px; height: 36px; background: #e5e7eb; }
-    .io-btn { display: flex; align-items: center; gap: 5px; font-size: 12px; padding: 6px 12px; border-radius: 7px; font-weight: 500; }
-    .export-btn { background: #185FA5; color: #fff; border-color: #185FA5; }
-    .export-btn:hover { background: #1451a0; }
-    .import-btn { background: #fff; color: #374151; border-color: #d1d5db; }
+/* Setup banner */
+.setup-banner{background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:10px 14px;margin:8px 14px 0;font-size:12px;color:#92400E;display:flex;align-items:flex-start;gap:8px;flex-shrink:0}
+.setup-banner a{color:#1D4ED8;text-decoration:underline}
+.sync-banner{background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;padding:8px 14px;margin:6px 14px 0;font-size:11px;color:#1E40AF;display:flex;align-items:center;gap:8px;flex-shrink:0}
 
-    /* Main */
-    .main { display: flex; flex: 1; overflow: hidden; }
+/* Main */
+.main{display:flex;flex:1;overflow:hidden}
 
-    /* Sidebar */
-    .sidebar { width: 278px; display: flex; flex-direction: column; background: #f9fafb; border-right: 1px solid #e5e7eb; flex-shrink: 0; }
-    .sidebar-hd { padding: 11px 10px 9px; background: #fff; border-bottom: 1px solid #e5e7eb; flex-shrink: 0; }
-    .sidebar-hd-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .sidebar-title { font-weight: 700; font-size: 13px; color: #111827; }
-    .count-pill { font-size: 10px; background: #f3f4f6; padding: 2px 8px; border-radius: 999px; color: #6b7280; }
-    .filter-row { display: flex; gap: 4px; margin-top: 6px; }
-    .filter-btn { font-size: 11px; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
-    .pool-list { flex: 1; overflow-y: auto; padding: 7px; transition: background 0.15s; }
-    .pool-list.drag-over { background: rgba(24,95,165,0.05); }
+/* Sidebar */
+.sidebar{width:278px;display:flex;flex-direction:column;background:#f9fafb;border-right:1px solid #e5e7eb;flex-shrink:0}
+.sidebar-hd{padding:11px 10px 9px;background:#fff;border-bottom:1px solid #e5e7eb;flex-shrink:0}
+.sidebar-hd-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.sidebar-title{font-weight:700;font-size:13px;color:#111827}
+.count-pill{font-size:10px;background:#f3f4f6;padding:2px 8px;border-radius:999px;color:#6b7280}
+.filter-row{display:flex;gap:4px;margin-top:6px}
+.filter-btn{font-size:11px;padding:3px 9px;border-radius:999px;white-space:nowrap}
+.pool-list{flex:1;overflow-y:auto;padding:7px;transition:background .15s}
+.pool-list.drag-over{background:rgba(24,95,165,.05)}
+.pool-card{padding:7px 9px;margin-bottom:4px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;cursor:grab;user-select:none;transition:opacity .12s,box-shadow .12s}
+.pool-card:hover{box-shadow:0 1px 5px rgba(0,0,0,.09)}
+.pool-card.dragging{opacity:.35}
+.pool-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:4px}
+.pool-name{font-size:12px;font-weight:600;color:#111827}
+.pool-cred{font-size:10px;color:#9ca3af;margin-left:3px}
+.tag-row{display:flex;gap:3px;flex-wrap:wrap;margin-top:4px}
+.tag{font-size:10px;padding:1px 6px;border-radius:999px;white-space:nowrap}
+.tag-type{background:#f3f4f6;color:#6b7280}
+.tag-travel{background:#ECFDF5;color:#065F46}
+.tag-scribe{background:#EFF6FF;color:#1D4ED8}
+.pool-locs{font-size:10px;color:#9ca3af;margin-top:3px}
+.sidebar-footer{padding:8px;border-top:1px solid #e5e7eb;background:#fff;flex-shrink:0}
+.add-form{font-size:12px}
+.add-form-title{font-weight:600;margin-bottom:8px;color:#111827;font-size:13px}
+.add-form input,.add-form select{margin-bottom:5px}
+.locs-row{display:flex;gap:4px}
+.locs-row input{flex:1;font-size:11px}
+.add-form-section{font-size:11px;color:#6b7280;margin:4px 0 5px}
+.type-toggles{display:flex;flex-wrap:wrap;gap:3px;margin-bottom:8px}
+.type-toggle-btn{font-size:10px;padding:2px 7px;border-radius:999px;transition:all .12s}
+.type-toggle-btn.active{background:#EFF6FF;color:#1D4ED8;border-color:#BFDBFE}
+.checkbox-row{display:flex;gap:14px;margin-bottom:8px;font-size:12px}
+.checkbox-row label{display:flex;align-items:center;gap:5px;cursor:pointer}
+.btn-row{display:flex;gap:6px}
+.btn-primary{flex:1;background:#185FA5;color:#fff;border-color:#185FA5;font-weight:600}
+.btn-primary:hover{background:#1451a0}
+.empty-state{text-align:center;padding:24px;color:#9ca3af;font-size:12px}
 
-    /* Pool card */
-    .pool-card { padding: 7px 9px; margin-bottom: 4px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; cursor: grab; user-select: none; transition: opacity 0.12s, box-shadow 0.12s; }
-    .pool-card:hover { box-shadow: 0 1px 5px rgba(0,0,0,0.09); }
-    .pool-card.dragging { opacity: 0.35; }
-    .pool-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 4px; }
-    .pool-name { font-size: 12px; font-weight: 600; color: #111827; }
-    .pool-cred { font-size: 10px; color: #9ca3af; margin-left: 3px; }
-    .tag-row { display: flex; gap: 3px; flex-wrap: wrap; margin-top: 4px; }
-    .tag { font-size: 10px; padding: 1px 6px; border-radius: 999px; white-space: nowrap; }
-    .tag-type { background: #f3f4f6; color: #6b7280; }
-    .tag-travel { background: #ECFDF5; color: #065F46; }
-    .tag-scribe { background: #EFF6FF; color: #1D4ED8; }
-    .pool-locs { font-size: 10px; color: #9ca3af; margin-top: 3px; }
+/* Doctor grid */
+.doctor-grid{flex:1;overflow-y:auto;padding:14px}
+.grid-inner{display:grid;grid-template-columns:repeat(auto-fill,minmax(294px,1fr));gap:12px;align-items:start}
+.doc-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;overflow:hidden;transition:border-color .12s}
+.doc-card.drop-target{border-width:2px;box-shadow:0 0 0 3px rgba(0,0,0,.04)}
+.doc-header{padding:10px 12px;border-bottom:1px solid;display:flex;align-items:flex-start;gap:8px}
+.doc-avatar{width:33px;height:33px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:800;flex-shrink:0;letter-spacing:.03em}
+.doc-name{font-weight:700;font-size:13px}
+.doc-spec{font-size:11px;margin-top:1px}
+.doc-badge{font-size:10px;padding:2px 8px;border-radius:999px;border:1px solid;white-space:nowrap;flex-shrink:0;font-weight:600}
+.badge-danger{background:#FEF2F2;color:#991B1B;border-color:#FECACA}
+.badge-warn{background:#FFFBEB;color:#92400E;border-color:#FDE68A}
+.badge-ok{background:#F0FDF4;color:#166534;border-color:#BBF7D0}
+.doc-section{padding:8px 12px;border-bottom:1px solid #f3f4f6}
+.section-label{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;display:flex;justify-content:space-between;align-items:center}
+.section-actions{display:flex;gap:6px}
+.link-btn{font-size:10px;background:transparent;border:none;cursor:pointer;padding:0;font-weight:600}
+.link-btn:hover{background:transparent;text-decoration:underline}
+.loc-tags{display:flex;flex-wrap:wrap;gap:3px}
+.loc-tag{font-size:10px;padding:2px 8px;border-radius:999px;white-space:nowrap;display:flex;align-items:center;gap:3px}
+.loc-tag-rm{background:transparent;border:none;cursor:pointer;color:inherit;font-size:12px;padding:0;line-height:1;opacity:.6}
+.loc-tag-rm:hover{opacity:1;background:transparent}
+.add-loc-row{display:flex;gap:5px;margin-top:6px}
+.add-loc-row input{flex:1;font-size:11px;padding:4px 8px}
+.add-loc-row button{padding:4px 10px;font-size:11px;font-weight:600;background:#f3f4f6}
+.sched-editor{margin-top:8px;background:#f9fafb;border-radius:8px;padding:8px 9px}
+.sched-loc{margin-bottom:6px}
+.sched-loc-label{font-size:10px;color:#6b7280;margin-bottom:3px;font-weight:500}
+.sched-days{display:flex;gap:3px}
+.day-btn{font-size:10px;padding:2px 6px;border-radius:4px;transition:all .1s}
+.day-btn.on{color:#fff;border-color:transparent}
+.doc-team{padding:8px 12px;min-height:56px}
+.team-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.team-label{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.05em}
+.team-progress{font-size:10px;color:#9ca3af}
+.empty-drop{text-align:center;padding:9px;border-radius:8px;border:1.5px dashed;font-size:11px;transition:all .12s}
+.add-more-drop{text-align:center;padding:4px;margin-top:5px;border-radius:6px;border:1.5px dashed;font-size:10px}
+.tech-chip{display:flex;align-items:center;gap:5px;padding:5px 8px;margin-bottom:4px;border-radius:7px;border:1px solid;cursor:grab;user-select:none;transition:opacity .12s}
+.tech-chip:hover{filter:brightness(.97)}
+.tech-chip.dragging{opacity:.3}
+.tech-chip-name{flex:1;font-size:12px;font-weight:600;color:#111827}
+.tech-chip-cred{font-size:10px;color:#9ca3af;font-weight:400;margin-left:3px}
+.remove-btn{background:transparent;border:none;cursor:pointer;color:#9ca3af;font-size:16px;padding:0;line-height:1;flex-shrink:0}
+.remove-btn:hover{background:transparent;color:#6b7280}
 
-    /* Sidebar footer */
-    .sidebar-footer { padding: 8px; border-top: 1px solid #e5e7eb; background: #fff; flex-shrink: 0; }
-    .add-form { font-size: 12px; }
-    .add-form-title { font-weight: 600; margin-bottom: 8px; color: #111827; font-size: 13px; }
-    .add-form input, .add-form select { margin-bottom: 5px; }
-    .locs-row { display: flex; gap: 4px; }
-    .locs-row input { flex: 1; font-size: 11px; }
-    .add-form-section { font-size: 11px; color: #6b7280; margin: 4px 0 5px; }
-    .type-toggles { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 8px; }
-    .type-toggle-btn { font-size: 10px; padding: 2px 7px; border-radius: 999px; transition: all 0.12s; }
-    .type-toggle-btn.active { background: #EFF6FF; color: #1D4ED8; border-color: #BFDBFE; }
-    .checkbox-row { display: flex; gap: 14px; margin-bottom: 8px; font-size: 12px; }
-    .checkbox-row label { display: flex; align-items: center; gap: 5px; cursor: pointer; }
-    .btn-row { display: flex; gap: 6px; }
-    .btn-primary { flex: 1; background: #185FA5; color: #fff; border-color: #185FA5; font-weight: 600; }
-    .btn-primary:hover { background: #1451a0; }
+/* Legend */
+.legend{padding:5px 18px;background:#fff;border-top:1px solid #e5e7eb;display:flex;align-items:center;gap:14px;flex-shrink:0;font-size:11px;color:#6b7280;flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:5px}
+.legend-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
 
-    /* Doctor grid */
-    .doctor-grid { flex: 1; overflow-y: auto; padding: 14px; }
-    .grid-inner { display: grid; grid-template-columns: repeat(auto-fill, minmax(294px, 1fr)); gap: 12px; align-items: start; }
+/* Toast */
+.toast{position:fixed;bottom:60px;left:50%;transform:translateX(-50%);background:#111827;color:#fff;padding:8px 18px;border-radius:8px;font-size:12px;z-index:999;box-shadow:0 4px 12px rgba(0,0,0,.2)}
 
-    /* Doctor card */
-    .doc-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; transition: border-color 0.12s; }
-    .doc-card.drop-target { border-width: 2px; box-shadow: 0 0 0 3px rgba(0,0,0,0.04); }
-    .doc-header { padding: 10px 12px; border-bottom: 1px solid; display: flex; align-items: flex-start; gap: 8px; }
-    .doc-avatar { width: 33px; height: 33px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 10px; font-weight: 800; flex-shrink: 0; letter-spacing: 0.03em; }
-    .doc-name { font-weight: 700; font-size: 13px; }
-    .doc-spec { font-size: 11px; margin-top: 1px; }
-    .doc-badge { font-size: 10px; padding: 2px 8px; border-radius: 999px; border: 1px solid; white-space: nowrap; flex-shrink: 0; font-weight: 600; }
-    .badge-danger { background: #FEF2F2; color: #991B1B; border-color: #FECACA; }
-    .badge-warn   { background: #FFFBEB; color: #92400E; border-color: #FDE68A; }
-    .badge-ok     { background: #F0FDF4; color: #166534; border-color: #BBF7D0; }
+/* Lock screen */
+.lock-screen{position:fixed;inset:0;background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 50%,#0f172a 100%);display:flex;align-items:center;justify-content:center;z-index:1000}
+.lock-card{background:rgba(255,255,255,.06);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.12);border-radius:20px;padding:40px 36px 32px;width:360px;text-align:center;box-shadow:0 32px 80px rgba(0,0,0,.5)}
+.lock-logo{width:56px;height:56px;background:linear-gradient(135deg,#185FA5,#2563eb);border-radius:16px;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;font-size:26px;box-shadow:0 8px 24px rgba(37,99,235,.4)}
+.lock-title{font-size:20px;font-weight:800;color:#f8fafc;margin-bottom:4px;letter-spacing:-.3px}
+.lock-sub{font-size:12px;color:#94a3b8;margin-bottom:28px}
+.lock-input-wrap{position:relative;margin-bottom:12px}
+.lock-input{width:100%;background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.15);border-radius:10px;padding:13px 44px 13px 16px;font-size:16px;color:#f8fafc;letter-spacing:.1em;text-align:center;font-family:inherit;outline:none;transition:border-color .2s,box-shadow .2s}
+.lock-input::placeholder{color:#475569;letter-spacing:0}
+.lock-input:focus{border-color:rgba(59,130,246,.7);box-shadow:0 0 0 3px rgba(59,130,246,.15)}
+.lock-input.error{border-color:rgba(239,68,68,.7);box-shadow:0 0 0 3px rgba(239,68,68,.15)}
+.lock-eye{position:absolute;right:13px;top:50%;transform:translateY(-50%);background:transparent;border:none;color:#64748b;cursor:pointer;font-size:16px;padding:2px}
+.lock-eye:hover{color:#94a3b8;background:transparent}
+.lock-error{font-size:12px;color:#f87171;margin-bottom:12px;min-height:18px}
+.lock-btn{width:100%;padding:13px;background:linear-gradient(135deg,#185FA5,#2563eb);color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;transition:opacity .15s,transform .1s;letter-spacing:.02em;margin-bottom:16px}
+.lock-btn:hover{opacity:.92}
+.lock-btn:active{transform:scale(.98)}
+.lock-btn:disabled{opacity:.4;cursor:not-allowed}
+.lock-remember{display:flex;align-items:center;justify-content:center;gap:7px;font-size:11px;color:#64748b;cursor:pointer}
+.lock-remember input{accent-color:#2563eb;cursor:pointer;width:auto}
+.lock-footer{margin-top:28px;font-size:10px;color:#334155}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.shake{animation:shake .4s ease}
 
-    /* Locations section */
-    .doc-section { padding: 8px 12px; border-bottom: 1px solid #f3f4f6; }
-    .section-label { font-size: 10px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px; display: flex; justify-content: space-between; align-items: center; }
-    .section-actions { display: flex; gap: 6px; }
-    .link-btn { font-size: 10px; background: transparent; border: none; cursor: pointer; padding: 0; font-weight: 600; }
-    .link-btn:hover { background: transparent; text-decoration: underline; }
-    .loc-tags { display: flex; flex-wrap: wrap; gap: 3px; }
-    .loc-tag { font-size: 10px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; display: flex; align-items: center; gap: 3px; }
-    .loc-tag-rm { background: transparent; border: none; cursor: pointer; color: inherit; font-size: 12px; padding: 0; line-height: 1; opacity: 0.6; }
-    .loc-tag-rm:hover { opacity: 1; background: transparent; }
-    .add-loc-row { display: flex; gap: 5px; margin-top: 6px; }
-    .add-loc-row input { flex: 1; font-size: 11px; padding: 4px 8px; }
-    .add-loc-row button { padding: 4px 10px; font-size: 11px; font-weight: 600; background: #f3f4f6; }
-
-    /* Schedule editor */
-    .sched-editor { margin-top: 8px; background: #f9fafb; border-radius: 8px; padding: 8px 9px; }
-    .sched-loc { margin-bottom: 6px; }
-    .sched-loc-label { font-size: 10px; color: #6b7280; margin-bottom: 3px; font-weight: 500; }
-    .sched-days { display: flex; gap: 3px; }
-    .day-btn { font-size: 10px; padding: 2px 6px; border-radius: 4px; transition: all 0.1s; }
-    .day-btn.on { color: #fff; border-color: transparent; }
-
-    /* Team section */
-    .doc-team { padding: 8px 12px; min-height: 56px; }
-    .team-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
-    .team-label { font-size: 10px; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.05em; }
-    .team-progress { font-size: 10px; color: #9ca3af; }
-    .empty-drop { text-align: center; padding: 9px; border-radius: 8px; border: 1.5px dashed; font-size: 11px; transition: all 0.12s; }
-    .add-more-drop { text-align: center; padding: 4px; margin-top: 5px; border-radius: 6px; border: 1.5px dashed; font-size: 10px; }
-
-    /* Tech chip (assigned) */
-    .tech-chip { display: flex; align-items: center; gap: 5px; padding: 5px 8px; margin-bottom: 4px; border-radius: 7px; border: 1px solid; cursor: grab; user-select: none; transition: opacity 0.12s; }
-    .tech-chip:hover { filter: brightness(0.97); }
-    .tech-chip.dragging { opacity: 0.3; }
-    .tech-chip-name { flex: 1; font-size: 12px; font-weight: 600; color: #111827; }
-    .tech-chip-cred { font-size: 10px; color: #9ca3af; font-weight: 400; margin-left: 3px; }
-    .remove-btn { background: transparent; border: none; cursor: pointer; color: #9ca3af; font-size: 16px; padding: 0; line-height: 1; flex-shrink: 0; }
-    .remove-btn:hover { background: transparent; color: #6b7280; }
-
-    /* Legend / footer */
-    .legend { padding: 5px 18px; background: #fff; border-top: 1px solid #e5e7eb; display: flex; align-items: center; gap: 14px; flex-shrink: 0; font-size: 11px; color: #6b7280; flex-wrap: wrap; }
-    .legend-item { display: flex; align-items: center; gap: 5px; }
-    .legend-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-
-    /* Misc */
-    .empty-state { text-align: center; padding: 24px; color: #9ca3af; font-size: 12px; }
-    .toast { position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%); background: #111827; color: #fff; padding: 8px 18px; border-radius: 8px; font-size: 12px; z-index: 999; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-
-    /* ── Print ── */
-    @media print {
-      body { background: #fff; overflow: visible; }
-      #root { height: auto; overflow: visible; }
-      .header, .sidebar, .pool-list .add-form, .sidebar-footer,
-      .io-btn, .link-btn, .remove-btn, .sched-editor { display: none !important; }
-      .main { overflow: visible; }
-      .doctor-grid { overflow: visible; padding: 0; }
-      .grid-inner { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
-      .doc-card { break-inside: avoid; border: 1px solid #ccc !important; }
-      .doc-header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .doc-avatar { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .doc-badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .tech-chip { border: 1px solid #ddd !important; background: #f9f9f9 !important; }
-      .legend { position: static; border-top: 1px solid #ccc; padding: 6px; font-size: 10px; }
-      .print-header { display: block !important; text-align: center; margin-bottom: 16px; padding-bottom: 10px; border-bottom: 2px solid #111827; }
-      .print-header h1 { font-size: 16px; font-weight: 700; }
-      .print-header p  { font-size: 11px; color: #666; margin-top: 3px; }
-    }
-    .print-header { display: none; }
-
-    /* ── Google Sync ── */
-    .sync-btn { display:flex; align-items:center; gap:6px; padding:5px 11px; border-radius:7px; font-size:11px; font-weight:600; cursor:pointer; border:1px solid; transition:all .15s; white-space:nowrap; }
-    .sync-offline { background:#fff; color:#374151; border-color:#d1d5db; }
-    .sync-offline:hover { background:#f9fafb; border-color:#9ca3af; }
-    .sync-connected { background:#F0FDF4; color:#15803d; border-color:#86EFAC; font-weight:700; }
-    .sync-connected:hover { background:#DCFCE7; }
-    .sync-syncing { background:#EFF6FF; color:#1D4ED8; border-color:#BFDBFE; }
-    .sync-error { background:#FEF2F2; color:#991B1B; border-color:#FECACA; }
-    .sync-dot { width:7px; height:7px; border-radius:50%; flex-shrink:0; }
-    .dot-offline { background:#9ca3af; }
-    .dot-ok { background:#16a34a; }
-    .dot-busy { background:#2563eb; animation:pulse .9s infinite; }
-    .dot-error { background:#dc2626; }
-    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-    .sync-user { font-size:10px; color:#6b7280; max-width:140px; overflow:hidden; text-overflow:ellipsis; }
-    .setup-banner { background:#FFFBEB; border:1px solid #FDE68A; border-radius:8px; padding:10px 14px; margin:10px 14px 0; font-size:12px; color:#92400E; display:flex; align-items:flex-start; gap:8px; }
-    .setup-banner a { color:#1D4ED8; text-decoration:underline; }
-    .drive-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,.5); display:flex; align-items:center; justify-content:center; z-index:200; }
-    .drive-modal { background:#fff; border-radius:14px; padding:24px; width:440px; box-shadow:0 20px 60px rgba(0,0,0,.25); }
-    .drive-modal h3 { font-size:16px; font-weight:700; margin-bottom:6px; }
-    .drive-modal p { font-size:13px; color:#374151; margin-bottom:16px; line-height:1.5; }
-    .drive-modal-btns { display:flex; gap:8px; justify-content:flex-end; }
-    .dm-primary { background:#185FA5; color:#fff; border-color:#185FA5; font-weight:600; font-size:13px; padding:7px 16px; }
-    .dm-primary:hover { background:#1451a0; }
-    .dm-secondary { font-size:13px; padding:7px 16px; }
-  </style>
+/* Print */
+@media print{
+  body{background:#fff;overflow:visible}
+  #root{height:auto}
+  .header,.sidebar,.add-loc-row,.sidebar-footer,.io-btn,.link-btn,.remove-btn,.sched-editor,.sync-btn,.setup-banner,.sync-banner{display:none!important}
+  .main{overflow:visible}
+  .doctor-grid{overflow:visible;padding:0}
+  .grid-inner{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .doc-card{break-inside:avoid}
+  .legend{position:static;border-top:1px solid #ccc;padding:6px;font-size:10px}
+  .print-header{display:block!important;text-align:center;margin-bottom:16px;padding-bottom:10px;border-bottom:2px solid #111827}
+  .print-header h1{font-size:16px;font-weight:700}
+  .print-header p{font-size:11px;color:#666;margin-top:3px}
+}
+.print-header{display:none}
+</style>
 </head>
 <body>
 <div id="root"></div>
-
 <script>
 const { useState, useRef, useEffect, useCallback, Fragment } = React;
 
-/* ─── localStorage helpers ──────────────────────────────────── */
-const STORAGE_KEY = 'neya-team-builder-v2';
+/* ══════════════════════════════════════════════════════════════
+   CONFIGURATION — edit these two blocks to customise the app
+   ══════════════════════════════════════════════════════════════ */
 
-/* ─── Passcode ───────────────────────────────────────────────────
-   Change APP_PASSCODE to whatever passcode you want staff to use.
-   The unlock is remembered in localStorage when "Remember this
-   device" is checked, or only for the session when unchecked.    */
-const APP_PASSCODE    = 'meadows1';      // ← change this
-const UNLOCK_LS_KEY   = 'neya-unlocked';
-const isAlreadyOpen   = () => localStorage.getItem(UNLOCK_LS_KEY) === '1' || sessionStorage.getItem(UNLOCK_LS_KEY) === '1';
-function loadSaved() {
-  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch { return {}; }
-}
-function saveState(docs, techs) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ docs, techs, savedAt: new Date().toISOString() })); } catch {}
-}
+/* Passcode — change 'meadows1' to whatever you want staff to use */
+const APP_PASSCODE  = 'meadows1';
+const UNLOCK_KEY    = 'neya-unlocked';
 
-/* ─── Firebase / Firestore config ───────────────────────────── */
-/*
-  FIRESTORE RULES — paste these in Firebase Console → Firestore → Rules:
-  ─────────────────────────────────────────────────────────────────────
-  rules_version = '2';
-  service cloud.firestore {
-    match /databases/{database}/documents {
-      match /teamBuilder/{doc} {
-        allow read, write: if request.auth != null;
-      }
-    }
-  }
-  ─────────────────────────────────────────────────────────────────────
-*/
-
-// !! REPLACE with your Firebase project config (Project Settings → General → Your apps) !!
-const FIREBASE_CONFIG = {
+/* Firebase config — already filled in with your project */
+const FB_CFG = {
   apiKey:            'AIzaSyBk5CZtGdTA9O2id_C_QCoi3Jp72uKK_r0',
   authDomain:        'team-builder-73ec4.firebaseapp.com',
   projectId:         'team-builder-73ec4',
   storageBucket:     'team-builder-73ec4.firebasestorage.app',
   messagingSenderId: '148364566179',
   appId:             '1:148364566179:web:7cdab59687a9bbf5916916',
-  measurementId:     'G-L9ZXLVCQ7N',
 };
+const FS_COL = 'teamBuilder';
+const FS_DOC = 'shared';
 
-const FIRESTORE_COLLECTION = 'teamBuilder';
-const FIRESTORE_DOC_ID     = 'shared';        // all signed-in users share this document
+/* ══════════════════════════════════════════════════════════════
+   Local-storage helpers
+   ══════════════════════════════════════════════════════════════ */
+const LS_KEY = 'neya-team-builder-v3';
+function lsLoad()  { try { return JSON.parse(localStorage.getItem(LS_KEY)) || {}; } catch { return {}; } }
+function lsSave(d) { try { localStorage.setItem(LS_KEY, JSON.stringify(d)); } catch {} }
+function isOpen()  { return localStorage.getItem(UNLOCK_KEY)==='1' || sessionStorage.getItem(UNLOCK_KEY)==='1'; }
 
-/* ─── Firebase initialiser (safe to call multiple times) ─────── */
-let _db = null, _auth = null;
-function getFirebase() {
-  if (_db && _auth) return { db: _db, auth: _auth };
-  if (!window.firebase || !FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey === 'YOUR_API_KEY') return null;
+/* ══════════════════════════════════════════════════════════════
+   Firebase init (safe to call multiple times)
+   ══════════════════════════════════════════════════════════════ */
+let _db=null, _auth=null;
+function getFB() {
+  if (_db && _auth) return true;
+  if (!window.firebase) return false;
   try {
-    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    if (!firebase.apps.length) firebase.initializeApp(FB_CFG);
     _db   = firebase.firestore();
     _auth = firebase.auth();
-    // Enable offline persistence so the app works briefly without internet
-    _db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
-    return { db: _db, auth: _auth };
-  } catch { return null; }
+    _db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
+    return true;
+  } catch(e) {
+    if (e.code==='app/duplicate-app') { _db=firebase.firestore(); _auth=firebase.auth(); return true; }
+    return false;
+  }
 }
 
-/* ─── Constants ─────────────────────────────────────────────── */
+/* ══════════════════════════════════════════════════════════════
+   Static data
+   ══════════════════════════════════════════════════════════════ */
 const DAYS   = ['Mon','Tue','Wed','Thu','Fri'];
 const CTYPES = ['Retina','ROP','Medcomp','Comp','Peds','Oculoplastics'];
-
-/* Per-doctor coverage thresholds
-   min    = minimum acceptable (below → danger/red)
-   target = fully covered     (at or above → green)
-   between min and target     → warn/amber                     */
 const THRESHOLDS = {
-  'd1' : { min: 3, target: 3 },  // Amram           – need 3
-  'd2' : { min: 3, target: 3 },  // Bodnar           – need 3
-  'd3' : { min: 4, target: 4 },  // Calvo            – need 4
-  'd4' : { min: 4, target: 4 },  // Elkins           – need 4
-  'd5' : { min: 1, target: 1 },  // Gunn             – need 1
-  'd6' : { min: 4, target: 4 },  // Pezda            – need 4
-  'd7' : { min: 5, target: 5 },  // Lee              – need 5
-  'd8' : { min: 5, target: 5 },  // Saboori          – need 5
-  'd9' : { min: 4, target: 4 },  // Peterson         – need 4
-  'd10': { min: 2, target: 2 },  // Uzcategui        – need 2
-  'd11': { min: 4, target: 4 },  // Hay              – need 4
-  'd12': { min: 4, target: 4 },  // Firl             – need 4
-  'd13': { min: 2, target: 2 },  // Warner           – need 2
-  'd14': { min: 3, target: 4 },  // Giang            – 3 min / 4 ideal
-  'd15': { min: 3, target: 4 },  // Ortiz            – 3 min / 4 ideal
-  'd16': { min: 3, target: 4 },  // Villena          – 3 min / 4 ideal
-  'd17': { min: 3, target: 3 },  // Xin              – need 3
-  'd18': { min: 2, target: 2 },  // Vander Veldt     – need 2
+  d1:{min:3,target:3},d2:{min:3,target:3},d3:{min:4,target:4},d4:{min:4,target:4},
+  d5:{min:1,target:1},d6:{min:4,target:4},d7:{min:5,target:5},d8:{min:5,target:5},
+  d9:{min:4,target:4},d10:{min:2,target:2},d11:{min:4,target:4},d12:{min:4,target:4},
+  d13:{min:2,target:2},d14:{min:3,target:4},d15:{min:3,target:4},d16:{min:3,target:4},
+  d17:{min:3,target:3},d18:{min:2,target:2},
 };
-
-/* Specialty colours */
 const SS = {
-  'Retina':                      { a:'#185FA5', bg:'#EFF6FF', bd:'#BFDBFE', t:'#1E40AF', sh:'RET' },
-  'Retina / ROP':                { a:'#185FA5', bg:'#EFF6FF', bd:'#BFDBFE', t:'#1E40AF', sh:'ROP' },
-  'Cataract and Glaucoma':       { a:'#0F6E56', bg:'#ECFDF5', bd:'#A7F3D0', t:'#065F46', sh:'CAT' },
-  'Cornea and Refractive':       { a:'#3B6D11', bg:'#F0FDF4', bd:'#BBF7D0', t:'#166534', sh:'COR' },
-  'Oculofacial Plastics':        { a:'#993C1D', bg:'#FFF7ED', bd:'#FED7AA', t:'#9A3412', sh:'OPL' },
-  'Comprehensive Ophthalmology': { a:'#534AB7', bg:'#F5F3FF', bd:'#DDD6FE', t:'#4C1D95', sh:'COM' },
-  'Pediatrics and Strabismus':   { a:'#993556', bg:'#FDF2F8', bd:'#F9A8D4', t:'#9D174D', sh:'PED' },
-  'Pediatrics':                  { a:'#993556', bg:'#FDF2F8', bd:'#F9A8D4', t:'#9D174D', sh:'PED' },
-  'Medical Optometry':           { a:'#854F0B', bg:'#FFFBEB', bd:'#FDE68A', t:'#92400E', sh:'OPT' },
+  'Retina':                     {a:'#185FA5',bg:'#EFF6FF',bd:'#BFDBFE',t:'#1E40AF',sh:'RET'},
+  'Retina / ROP':               {a:'#185FA5',bg:'#EFF6FF',bd:'#BFDBFE',t:'#1E40AF',sh:'ROP'},
+  'Cataract and Glaucoma':      {a:'#0F6E56',bg:'#ECFDF5',bd:'#A7F3D0',t:'#065F46',sh:'CAT'},
+  'Cornea and Refractive':      {a:'#3B6D11',bg:'#F0FDF4',bd:'#BBF7D0',t:'#166534',sh:'COR'},
+  'Oculofacial Plastics':       {a:'#993C1D',bg:'#FFF7ED',bd:'#FED7AA',t:'#9A3412',sh:'OPL'},
+  'Comprehensive Ophthalmology':{a:'#534AB7',bg:'#F5F3FF',bd:'#DDD6FE',t:'#4C1D95',sh:'COM'},
+  'Pediatrics and Strabismus':  {a:'#993556',bg:'#FDF2F8',bd:'#F9A8D4',t:'#9D174D',sh:'PED'},
+  'Pediatrics':                 {a:'#993556',bg:'#FDF2F8',bd:'#F9A8D4',t:'#9D174D',sh:'PED'},
+  'Medical Optometry':          {a:'#854F0B',bg:'#FFFBEB',bd:'#FDE68A',t:'#92400E',sh:'OPT'},
 };
-
 const STYPES = {
-  'Retina':['Retina'], 'Retina / ROP':['Retina','ROP'],
-  'Cataract and Glaucoma':['Medcomp','Comp'], 'Cornea and Refractive':['Medcomp','Comp'],
-  'Oculofacial Plastics':['Oculoplastics'], 'Comprehensive Ophthalmology':['Comp','Medcomp'],
-  'Pediatrics and Strabismus':['Peds'], 'Pediatrics':['Peds'], 'Medical Optometry':['Medcomp'],
+  'Retina':['Retina'],'Retina / ROP':['Retina','ROP'],
+  'Cataract and Glaucoma':['Medcomp','Comp'],'Cornea and Refractive':['Medcomp','Comp'],
+  'Oculofacial Plastics':['Oculoplastics'],'Comprehensive Ophthalmology':['Comp','Medcomp'],
+  'Pediatrics and Strabismus':['Peds'],'Pediatrics':['Peds'],'Medical Optometry':['Medcomp'],
 };
+const normLoc = l => { const s=l.toLowerCase().trim(); if(s==='north'||s==='north las vegas')return'nlv'; if(s==='centennial'||s==='centennial hills')return'centennial'; if(s.includes('smoke ranch'))return'smokeranch'; return s; };
 
-const normLoc = l => {
-  const s = l.toLowerCase().trim();
-  if (s==='north' || s==='north las vegas') return 'nlv';
-  if (s==='centennial' || s==='centennial hills') return 'centennial';
-  if (s.includes('smoke ranch')) return 'smokeranch';
-  return s;
-};
-
-/* ─── Doctor seed data ──────────────────────────────────────── */
 const DOCS_SEED = [
-  { id:'d1',  name:'Dr. Amram',        cred:'MD',     spec:'Retina',                      locs:['Smoke Ranch','Southwest','Henderson'],              sched:{} },
-  { id:'d2',  name:'Dr. Bodnar',       cred:'MD',     spec:'Retina / ROP',                locs:['Smoke Ranch','Henderson'],                          sched:{} },
-  { id:'d3',  name:'Dr. Calvo',        cred:'MD',     spec:'Retina',                      locs:['East','Pahrump'],                                   sched:{} },
-  { id:'d4',  name:'Dr. Elkins',       cred:'MD',     spec:'Retina',                      locs:['Centennial Hills','North Las Vegas'],                sched:{} },
-  { id:'d5',  name:'Dr. Gunn',         cred:'MD',     spec:'Retina',                      locs:['Smoke Ranch','Henderson','North Las Vegas'],         sched:{} },
-  { id:'d6',  name:'Dr. Pezda',        cred:'MD',     spec:'Retina',                      locs:['Southwest','Henderson'],                            sched:{} },
-  { id:'d7',  name:'Dr. Lee',          cred:'MD',     spec:'Cataract and Glaucoma',       locs:['Southwest','Henderson','Pahrump','East'],            sched:{} },
-  { id:'d8',  name:'Dr. Saboori',      cred:'MD',     spec:'Cataract and Glaucoma',       locs:['Smoke Ranch','Southwest','Henderson'],               sched:{} },
-  { id:'d9',  name:'Dr. Peterson',     cred:'MD, MS', spec:'Cornea and Refractive',       locs:['Smoke Ranch','East'],                               sched:{} },
-  { id:'d10', name:'Dr. Uzcategui',    cred:'MD',     spec:'Oculofacial Plastics',        locs:['Smoke Ranch'],                                      sched:{} },
-  { id:'d11', name:'Dr. Hay',          cred:'DO',     spec:'Comprehensive Ophthalmology', locs:['Centennial Hills','North Las Vegas'],                sched:{} },
-  { id:'d12', name:'Dr. Firl',         cred:'MD',     spec:'Pediatrics and Strabismus',   locs:['Centennial Hills','Smoke Ranch','Edna'],             sched:{} },
-  { id:'d13', name:'Dr. Warner',       cred:'DO',     spec:'Pediatrics',                  locs:['East','Edna'],                                      sched:{} },
-  { id:'d14', name:'Dr. Giang',        cred:'OD',     spec:'Medical Optometry',           locs:['Southwest','Henderson','East'],                     sched:{} },
-  { id:'d15', name:'Dr. Ortiz',        cred:'OD',     spec:'Medical Optometry',           locs:['Smoke Ranch','North Las Vegas'],                    sched:{} },
-  { id:'d16', name:'Dr. Villena',      cred:'OD',     spec:'Medical Optometry',           locs:['North Las Vegas','Southwest','East'],                sched:{} },
-  { id:'d17', name:'Dr. Xin',          cred:'OD',     spec:'Medical Optometry',           locs:['East','Henderson','North Las Vegas'],                sched:{} },
-  { id:'d18', name:'Dr. Vander Veldt', cred:'OD',     spec:'Medical Optometry',           locs:['Pahrump'],                                          sched:{} },
+  {id:'d1', name:'Dr. Amram',       cred:'MD',    spec:'Retina',                      locs:['Smoke Ranch','Southwest','Henderson'],            sched:{}},
+  {id:'d2', name:'Dr. Bodnar',      cred:'MD',    spec:'Retina / ROP',                locs:['Smoke Ranch','Henderson'],                        sched:{}},
+  {id:'d3', name:'Dr. Calvo',       cred:'MD',    spec:'Retina',                      locs:['East','Pahrump'],                                 sched:{}},
+  {id:'d4', name:'Dr. Elkins',      cred:'MD',    spec:'Retina',                      locs:['Centennial Hills','North Las Vegas'],              sched:{}},
+  {id:'d5', name:'Dr. Gunn',        cred:'MD',    spec:'Retina',                      locs:['Smoke Ranch','Henderson','North Las Vegas'],       sched:{}},
+  {id:'d6', name:'Dr. Pezda',       cred:'MD',    spec:'Retina',                      locs:['Southwest','Henderson'],                          sched:{}},
+  {id:'d7', name:'Dr. Lee',         cred:'MD',    spec:'Cataract and Glaucoma',       locs:['Southwest','Henderson','Pahrump','East'],          sched:{}},
+  {id:'d8', name:'Dr. Saboori',     cred:'MD',    spec:'Cataract and Glaucoma',       locs:['Smoke Ranch','Southwest','Henderson'],             sched:{}},
+  {id:'d9', name:'Dr. Peterson',    cred:'MD,MS', spec:'Cornea and Refractive',       locs:['Smoke Ranch','East'],                             sched:{}},
+  {id:'d10',name:'Dr. Uzcategui',   cred:'MD',    spec:'Oculofacial Plastics',        locs:['Smoke Ranch'],                                    sched:{}},
+  {id:'d11',name:'Dr. Hay',         cred:'DO',    spec:'Comprehensive Ophthalmology', locs:['Centennial Hills','North Las Vegas'],              sched:{}},
+  {id:'d12',name:'Dr. Firl',        cred:'MD',    spec:'Pediatrics and Strabismus',   locs:['Centennial Hills','Smoke Ranch','Edna'],           sched:{}},
+  {id:'d13',name:'Dr. Warner',      cred:'DO',    spec:'Pediatrics',                  locs:['East','Edna'],                                    sched:{}},
+  {id:'d14',name:'Dr. Giang',       cred:'OD',    spec:'Medical Optometry',           locs:['Southwest','Henderson','East'],                   sched:{}},
+  {id:'d15',name:'Dr. Ortiz',       cred:'OD',    spec:'Medical Optometry',           locs:['Smoke Ranch','North Las Vegas'],                  sched:{}},
+  {id:'d16',name:'Dr. Villena',     cred:'OD',    spec:'Medical Optometry',           locs:['North Las Vegas','Southwest','East'],              sched:{}},
+  {id:'d17',name:'Dr. Xin',         cred:'OD',    spec:'Medical Optometry',           locs:['East','Henderson','North Las Vegas'],              sched:{}},
+  {id:'d18',name:'Dr. Vander Veldt',cred:'OD',    spec:'Medical Optometry',           locs:['Pahrump'],                                        sched:{}},
 ];
 
-/* ─── Technician seed data ──────────────────────────────────── */
 const TECHS_SEED = [
-  { id:'t1',  name:'Alexander Mejia',         cred:'OSC', locs:['Henderson','Southwest','East'],                   types:['Retina','Medcomp','Comp'],                      travel:false,                     scribes:false, assignedTo:null },
-  { id:'t2',  name:'Andrea Ramirez',          cred:'',    locs:['North Las Vegas','Smoke Ranch','Centennial Hills'],types:['Retina','Medcomp','Peds'],                     travel:true,  tNote:'peds only', scribes:true,  assignedTo:null },
-  { id:'t3',  name:'Andrea Santiago Gaspar',  cred:'',    locs:['East','Smoke Ranch','North Las Vegas'],           types:['Retina','Medcomp','Comp'],                      travel:true,                     scribes:true,  assignedTo:null },
-  { id:'t4',  name:'Angel Taylor',            cred:'',    locs:['East','Henderson','North Las Vegas'],              types:['Retina','Medcomp','Comp'],                      travel:true,                     scribes:true,  assignedTo:null },
-  { id:'t5',  name:'Aretha Nunnery',          cred:'',    locs:['East','North Las Vegas','Smoke Ranch'],           types:['Retina','Medcomp','Comp','Oculoplastics'],       travel:true,                     scribes:false, assignedTo:null },
-  { id:'t6',  name:'Ascension Ferguson',      cred:'',    locs:['East','North Las Vegas','Smoke Ranch'],           types:['Retina','Medcomp','Comp'],                      travel:true,                     scribes:true,  assignedTo:null },
-  { id:'t7',  name:'Ashley Hughes',           cred:'',    locs:['Southwest','Edna','Smoke Ranch'],                 types:['Retina','Medcomp','Peds'],                      travel:false,                    scribes:false, assignedTo:null },
-  { id:'t8',  name:'Breanna Johnson',         cred:'',    locs:['Smoke Ranch','North Las Vegas','Centennial Hills'],types:['Retina','Medcomp','Comp'],                     travel:true,                     scribes:false, assignedTo:null },
-  { id:'t9',  name:'Cesar Vasquez Choy',      cred:'',    locs:['East','Henderson','Southwest'],                   types:['Retina','Medcomp','Comp'],                      travel:true,                     scribes:true,  assignedTo:null },
-  { id:'t10', name:'Crystal Castro',          cred:'',    locs:['East','Henderson','North Las Vegas'],              types:['Retina','Medcomp','Comp'],                      travel:true,                     scribes:true,  assignedTo:null },
-  { id:'t11', name:'Daisy Cano',              cred:'',    locs:['Centennial Hills','Smoke Ranch','North Las Vegas'],types:['Retina','Medcomp','Comp'],                     travel:false,                    scribes:true,  assignedTo:null },
-  { id:'t12', name:'Diana Cortez',            cred:'COA', locs:['East','Henderson','Southwest'],                   types:['Retina','Medcomp','Comp','Peds'],               travel:true,                     scribes:false, assignedTo:null },
-  { id:'t13', name:'Emily Alcantar',          cred:'',    locs:['East','Henderson','Southwest'],                   types:['Retina','Medcomp','Oculoplastics'],             travel:false,                    scribes:true,  assignedTo:null },
-  { id:'t14', name:'Erico Palmares',          cred:'',    locs:['East','North Las Vegas','Smoke Ranch'],           types:['Retina','Medcomp'],                             travel:true,                     scribes:false, assignedTo:null },
-  { id:'t15', name:'Estefany Morales Cano',   cred:'',    locs:['North Las Vegas','Smoke Ranch','Centennial Hills'],types:['Retina','Medcomp','Comp','Oculoplastics','Peds'],travel:true,                  scribes:true,  assignedTo:null },
-  { id:'t16', name:'Fabiola Cazeras',         cred:'',    locs:['North Las Vegas','Smoke Ranch','Centennial Hills'],types:['Retina','Medcomp'],                            travel:false,                    scribes:true,  assignedTo:null },
-  { id:'t17', name:'Gabriela Hernandez Sauno',cred:'',    locs:['East','North Las Vegas','Smoke Ranch'],           types:['Retina','Medcomp','Comp'],                      travel:true,                     scribes:false, assignedTo:null },
-  { id:'t18', name:'Gladys Pineda',           cred:'',    locs:['East','North Las Vegas','Henderson'],              types:['Retina','Medcomp','Comp'],                      travel:false, tNote:'Pezda only',scribes:true,  assignedTo:null },
-  { id:'t19', name:'Imani Langston',          cred:'',    locs:['Smoke Ranch','North Las Vegas','Centennial Hills'],types:['Retina','Medcomp','Comp','ROP','Peds'],         travel:true,                     scribes:false, assignedTo:null },
-  { id:'t20', name:'Jennifer Thomas',         cred:'',    locs:['East','Henderson','Southwest'],                   types:['Retina','Medcomp','Comp'],                      travel:true,                     scribes:false, assignedTo:null },
-  { id:'t21', name:'Jeremy Jeffries',         cred:'',    locs:['Southwest','Smoke Ranch','North Las Vegas'],      types:['Retina','Medcomp','Comp'],                      travel:true,                     scribes:false, assignedTo:null },
-  { id:'t22', name:'Kari Dechert',            cred:'',    locs:['Henderson','Southwest','Smoke Ranch'],            types:['Retina','Medcomp','Comp'],                      travel:false,                    scribes:false, assignedTo:null },
-  { id:'t23', name:'Kimberly Hernandez',      cred:'',    locs:['East','Henderson','Edna'],                       types:['Retina','Medcomp','Comp','Peds'],               travel:true,                     scribes:true,  assignedTo:null },
-  { id:'t24', name:'Laura Anderson',          cred:'',    locs:['East','Henderson','Southwest'],                   types:['Retina','Medcomp'],                             travel:false,                    scribes:false, assignedTo:null },
-  { id:'t25', name:'Litzi Salazar Hernandez', cred:'',    locs:['Smoke Ranch','North Las Vegas','Edna'],           types:['Retina','Medcomp','Peds'],                      travel:true,                     scribes:false, assignedTo:null },
-  { id:'t26', name:'Marlene Quintanilla',     cred:'COA', locs:['East','Henderson','Southwest'],                   types:['Retina','Medcomp','Comp','Oculoplastics'],       travel:true,                     scribes:false, assignedTo:null },
-  { id:'t27', name:'Merary Alvarez',          cred:'',    locs:['Pahrump'],                                       types:['Retina','Medcomp'],                             travel:false,                    scribes:false, assignedTo:null },
-  { id:'t28', name:'Merlynn Fulgencio',       cred:'',    locs:['Henderson','Southwest','East'],                   types:['Retina','Medcomp','Comp'],                      travel:false,                    scribes:false, assignedTo:null },
-  { id:'t29', name:'Mia Miller',              cred:'',    locs:['North Las Vegas','Centennial Hills','Smoke Ranch'],types:['Retina','Medcomp','Comp'],                     travel:false,                    scribes:true,  assignedTo:null },
-  { id:'t30', name:'Nachisan Benedictos',     cred:'COA', locs:['East','Henderson','Southwest'],                   types:['Retina'],                                       travel:false,                    scribes:false, assignedTo:null },
-  { id:'t31', name:'Nathalie Viton',          cred:'',    locs:['East','North Las Vegas','Smoke Ranch'],           types:['Medcomp','Comp'],                               travel:true,                     scribes:false, assignedTo:null },
-  { id:'t32', name:'Neyssa Innocent',         cred:'',    locs:['Southwest','Smoke Ranch','North Las Vegas'],      types:['Retina','Medcomp','Comp'],                      travel:true,                     scribes:false, assignedTo:null },
-  { id:'t33', name:'Nicole Torosian',         cred:'',    locs:['Southwest','Henderson','East'],                   types:['Retina','Medcomp','Comp'],                      travel:true,                     scribes:true,  assignedTo:null },
-  { id:'t34', name:'Pricila Naranjo',         cred:'',    locs:['East','North Las Vegas','Smoke Ranch'],           types:['Retina','Medcomp','Comp'],                      travel:true,                     scribes:true,  assignedTo:null },
-  { id:'t35', name:'Stephanie Kelly',         cred:'',    locs:['North Las Vegas','Centennial Hills','Smoke Ranch'],types:['Retina','Medcomp'],                            travel:true,                     scribes:false, assignedTo:null },
-  { id:'t36', name:'Summer Gwynne',           cred:'',    locs:['Southwest','Centennial Hills','Smoke Ranch'],     types:['Retina','Medcomp'],                             travel:true,                     scribes:true,  assignedTo:null },
-  { id:'t37', name:'Taryn Aho',               cred:'',    locs:['Smoke Ranch','North Las Vegas','Centennial Hills'],types:['Retina','Medcomp','Comp'],                    travel:true,                     scribes:false, assignedTo:null },
-  { id:'t38', name:'Taylor Adams',            cred:'',    locs:['Centennial Hills','North Las Vegas','Smoke Ranch'],types:['Retina','Medcomp','Comp'],                    travel:true,                     scribes:true,  assignedTo:null },
-  { id:'t39', name:'Tracy Lee',               cred:'',    locs:['East','Henderson','Southwest'],                   types:['Retina'],                                       travel:false,                    scribes:false, assignedTo:null },
-  { id:'t40', name:'Vanessa Franco',          cred:'',    locs:['East','North Las Vegas','Smoke Ranch'],           types:['Retina','ROP','Oculoplastics'],                 travel:false,                    scribes:true,  assignedTo:null },
-  { id:'t41', name:'Vanessa Hernandez',       cred:'',    locs:['Henderson','Southwest','East'],                   types:['Retina','Medcomp','Comp'],                      travel:false,                    scribes:false, assignedTo:null },
-  { id:'t42', name:'Veronica Carillo',        cred:'',    locs:['East','North Las Vegas','Smoke Ranch'],           types:['Retina','Medcomp','Comp','Peds'],               travel:true,                     scribes:true,  assignedTo:null },
-  { id:'t43', name:'Audrey Kamai',            cred:'',    locs:['Henderson','East','Southwest'],                   types:['Medcomp','Comp','Peds'],                        travel:true,                     scribes:false, assignedTo:null },
+  {id:'t1', name:'Alexander Mejia',          cred:'OSC',locs:['Henderson','Southwest','East'],                    types:['Retina','Medcomp','Comp'],                    travel:false,tNote:'',         scribes:false,assignedTo:null},
+  {id:'t2', name:'Andrea Ramirez',           cred:'',   locs:['North Las Vegas','Smoke Ranch','Centennial Hills'],types:['Retina','Medcomp','Peds'],                    travel:true, tNote:'peds only',scribes:true, assignedTo:null},
+  {id:'t3', name:'Andrea Santiago Gaspar',   cred:'',   locs:['East','Smoke Ranch','North Las Vegas'],            types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:true, assignedTo:null},
+  {id:'t4', name:'Angel Taylor',             cred:'',   locs:['East','Henderson','North Las Vegas'],              types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:true, assignedTo:null},
+  {id:'t5', name:'Aretha Nunnery',           cred:'',   locs:['East','North Las Vegas','Smoke Ranch'],            types:['Retina','Medcomp','Comp','Oculoplastics'],    travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t6', name:'Ascension Ferguson',       cred:'',   locs:['East','North Las Vegas','Smoke Ranch'],            types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:true, assignedTo:null},
+  {id:'t7', name:'Ashley Hughes',            cred:'',   locs:['Southwest','Edna','Smoke Ranch'],                  types:['Retina','Medcomp','Peds'],                    travel:false,tNote:'',         scribes:false,assignedTo:null},
+  {id:'t8', name:'Breanna Johnson',          cred:'',   locs:['Smoke Ranch','North Las Vegas','Centennial Hills'],types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t9', name:'Cesar Vasquez Choy',       cred:'',   locs:['East','Henderson','Southwest'],                    types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:true, assignedTo:null},
+  {id:'t10',name:'Crystal Castro',           cred:'',   locs:['East','Henderson','North Las Vegas'],              types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:true, assignedTo:null},
+  {id:'t11',name:'Daisy Cano',               cred:'',   locs:['Centennial Hills','Smoke Ranch','North Las Vegas'],types:['Retina','Medcomp','Comp'],                    travel:false,tNote:'',         scribes:true, assignedTo:null},
+  {id:'t12',name:'Diana Cortez',             cred:'COA',locs:['East','Henderson','Southwest'],                    types:['Retina','Medcomp','Comp','Peds'],             travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t13',name:'Emily Alcantar',           cred:'',   locs:['East','Henderson','Southwest'],                    types:['Retina','Medcomp','Oculoplastics'],           travel:false,tNote:'',         scribes:true, assignedTo:null},
+  {id:'t14',name:'Erico Palmares',           cred:'',   locs:['East','North Las Vegas','Smoke Ranch'],            types:['Retina','Medcomp'],                           travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t15',name:'Estefany Morales Cano',    cred:'',   locs:['North Las Vegas','Smoke Ranch','Centennial Hills'],types:['Retina','Medcomp','Comp','Oculoplastics','Peds'],travel:true,tNote:'',      scribes:true, assignedTo:null},
+  {id:'t16',name:'Fabiola Cazeras',          cred:'',   locs:['North Las Vegas','Smoke Ranch','Centennial Hills'],types:['Retina','Medcomp'],                           travel:false,tNote:'',         scribes:true, assignedTo:null},
+  {id:'t17',name:'Gabriela Hernandez Sauno', cred:'',   locs:['East','North Las Vegas','Smoke Ranch'],            types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t18',name:'Gladys Pineda',            cred:'',   locs:['East','North Las Vegas','Henderson'],              types:['Retina','Medcomp','Comp'],                    travel:false,tNote:'Pezda only',scribes:true,assignedTo:null},
+  {id:'t19',name:'Imani Langston',           cred:'',   locs:['Smoke Ranch','North Las Vegas','Centennial Hills'],types:['Retina','Medcomp','Comp','ROP','Peds'],       travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t20',name:'Jennifer Thomas',          cred:'',   locs:['East','Henderson','Southwest'],                    types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t21',name:'Jeremy Jeffries',          cred:'',   locs:['Southwest','Smoke Ranch','North Las Vegas'],       types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t22',name:'Kari Dechert',             cred:'',   locs:['Henderson','Southwest','Smoke Ranch'],             types:['Retina','Medcomp','Comp'],                    travel:false,tNote:'',         scribes:false,assignedTo:null},
+  {id:'t23',name:'Kimberly Hernandez',       cred:'',   locs:['East','Henderson','Edna'],                        types:['Retina','Medcomp','Comp','Peds'],             travel:true, tNote:'',         scribes:true, assignedTo:null},
+  {id:'t24',name:'Laura Anderson',           cred:'',   locs:['East','Henderson','Southwest'],                    types:['Retina','Medcomp'],                           travel:false,tNote:'',         scribes:false,assignedTo:null},
+  {id:'t25',name:'Litzi Salazar Hernandez',  cred:'',   locs:['Smoke Ranch','North Las Vegas','Edna'],            types:['Retina','Medcomp','Peds'],                    travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t26',name:'Marlene Quintanilla',      cred:'COA',locs:['East','Henderson','Southwest'],                    types:['Retina','Medcomp','Comp','Oculoplastics'],    travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t27',name:'Merary Alvarez',           cred:'',   locs:['Pahrump'],                                        types:['Retina','Medcomp'],                           travel:false,tNote:'',         scribes:false,assignedTo:null},
+  {id:'t28',name:'Merlynn Fulgencio',        cred:'',   locs:['Henderson','Southwest','East'],                    types:['Retina','Medcomp','Comp'],                    travel:false,tNote:'',         scribes:false,assignedTo:null},
+  {id:'t29',name:'Mia Miller',               cred:'',   locs:['North Las Vegas','Centennial Hills','Smoke Ranch'],types:['Retina','Medcomp','Comp'],                    travel:false,tNote:'',         scribes:true, assignedTo:null},
+  {id:'t30',name:'Nachisan Benedictos',      cred:'COA',locs:['East','Henderson','Southwest'],                    types:['Retina'],                                     travel:false,tNote:'',         scribes:false,assignedTo:null},
+  {id:'t31',name:'Nathalie Viton',           cred:'',   locs:['East','North Las Vegas','Smoke Ranch'],            types:['Medcomp','Comp'],                             travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t32',name:'Neyssa Innocent',          cred:'',   locs:['Southwest','Smoke Ranch','North Las Vegas'],       types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t33',name:'Nicole Torosian',          cred:'',   locs:['Southwest','Henderson','East'],                    types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:true, assignedTo:null},
+  {id:'t34',name:'Pricila Naranjo',          cred:'',   locs:['East','North Las Vegas','Smoke Ranch'],            types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:true, assignedTo:null},
+  {id:'t35',name:'Stephanie Kelly',          cred:'',   locs:['North Las Vegas','Centennial Hills','Smoke Ranch'],types:['Retina','Medcomp'],                           travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t36',name:'Summer Gwynne',            cred:'',   locs:['Southwest','Centennial Hills','Smoke Ranch'],      types:['Retina','Medcomp'],                           travel:true, tNote:'',         scribes:true, assignedTo:null},
+  {id:'t37',name:'Taryn Aho',                cred:'',   locs:['Smoke Ranch','North Las Vegas','Centennial Hills'],types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:false,assignedTo:null},
+  {id:'t38',name:'Taylor Adams',             cred:'',   locs:['Centennial Hills','North Las Vegas','Smoke Ranch'],types:['Retina','Medcomp','Comp'],                    travel:true, tNote:'',         scribes:true, assignedTo:null},
+  {id:'t39',name:'Tracy Lee',                cred:'',   locs:['East','Henderson','Southwest'],                    types:['Retina'],                                     travel:false,tNote:'',         scribes:false,assignedTo:null},
+  {id:'t40',name:'Vanessa Franco',           cred:'',   locs:['East','North Las Vegas','Smoke Ranch'],            types:['Retina','ROP','Oculoplastics'],               travel:false,tNote:'',         scribes:true, assignedTo:null},
+  {id:'t41',name:'Vanessa Hernandez',        cred:'',   locs:['Henderson','Southwest','East'],                    types:['Retina','Medcomp','Comp'],                    travel:false,tNote:'',         scribes:false,assignedTo:null},
+  {id:'t42',name:'Veronica Carillo',         cred:'',   locs:['East','North Las Vegas','Smoke Ranch'],            types:['Retina','Medcomp','Comp','Peds'],             travel:true, tNote:'',         scribes:true, assignedTo:null},
+  {id:'t43',name:'Audrey Kamai',             cred:'',   locs:['Henderson','East','Southwest'],                    types:['Medcomp','Comp','Peds'],                      travel:true, tNote:'',         scribes:false,assignedTo:null},
 ];
 
-/* ─── Helpers ───────────────────────────────────────────────── */
-function compat(tech, doc) {
-  const tl = tech.locs.map(normLoc);
-  const dl = doc.locs.map(normLoc);
-  const locOk  = tech.travel || dl.some(d => tl.includes(d));
-  const needed = STYPES[doc.spec] || [];
-  const typeOk = !needed.length || needed.some(n => tech.types.includes(n));
-  return { locOk, typeOk, ok: locOk && typeOk };
+/* ══════════════════════════════════════════════════════════════
+   Helpers
+   ══════════════════════════════════════════════════════════════ */
+function compat(tech,doc){
+  const tl=tech.locs.map(normLoc), dl=doc.locs.map(normLoc);
+  const locOk=tech.travel||dl.some(d=>tl.includes(d));
+  const needed=STYPES[doc.spec]||[];
+  const typeOk=!needed.length||needed.some(n=>tech.types.includes(n));
+  return{locOk,typeOk,ok:locOk&&typeOk};
+}
+function covStatus(docId,count){
+  const{min,target}=THRESHOLDS[docId]||{min:2,target:2};
+  if(count<min)  return{level:'danger',count,min,target};
+  if(count<target)return{level:'warn',count,min,target};
+  return{level:'ok',count,min,target};
+}
+function BadgeLabel({level,count,target}){
+  if(level==='danger') return count===0?'Need '+target+' — none assigned':count+'/'+target+' — need '+(target-count)+' more';
+  if(level==='warn')   return count+'/'+target+' — add '+(target-count)+' more';
+  return '✓ '+count+'/'+target;
 }
 
-function covStatus(docId, count) {
-  const { min, target } = THRESHOLDS[docId] || { min: 2, target: 2 };
-  if (count < min)     return { level:'danger', count, min, target };
-  if (count < target)  return { level:'warn',   count, min, target };
-  return                      { level:'ok',     count, min, target };
-}
-
-function BadgeLabel({ level, count, target }) {
-  if (level === 'danger') return count === 0
-    ? `Need ${target} — none assigned`
-    : `${count}/${target} — need ${target - count} more`;
-  if (level === 'warn') return `${count}/${target} — add ${target - count} more`;
-  return `✓ ${count}/${target}`;
-}
-
-/* ─── Lock Screen component ─────────────────────────────────── */
-function LockScreen({ onUnlock }) {
-  const [input,    setInput]   = React.useState('');
-  const [show,     setShow]    = React.useState(false);
-  const [error,    setError]   = React.useState('');
-  const [shake,    setShake]   = React.useState(false);
-  const [remember, setRemember]= React.useState(true);
-  const inputRef = React.useRef(null);
-
-  React.useEffect(() => { inputRef.current?.focus(); }, []);
-
-  const attempt = () => {
-    if (input === APP_PASSCODE) {
-      if (remember) localStorage.setItem(UNLOCK_LS_KEY, '1');
-      else          sessionStorage.setItem(UNLOCK_LS_KEY, '1');
+/* ══════════════════════════════════════════════════════════════
+   Lock screen
+   ══════════════════════════════════════════════════════════════ */
+function LockScreen({onUnlock}){
+  const [val,setVal]=useState('');
+  const [show,setShow]=useState(false);
+  const [err,setErr]=useState('');
+  const [shake,setShake]=useState(false);
+  const [remember,setRemember]=useState(true);
+  const ref=useRef(null);
+  useEffect(()=>{ref.current&&ref.current.focus();},[]);
+  function attempt(){
+    if(val===APP_PASSCODE){
+      if(remember)localStorage.setItem(UNLOCK_KEY,'1');
+      else sessionStorage.setItem(UNLOCK_KEY,'1');
       onUnlock();
     } else {
-      setError('Incorrect passcode — please try again.');
-      setShake(true);
-      setInput('');
-      setTimeout(() => { setShake(false); setError(''); inputRef.current?.focus(); }, 1600);
+      setErr('Incorrect passcode — please try again.');
+      setShake(true); setVal('');
+      setTimeout(()=>{setShake(false);setErr('');ref.current&&ref.current.focus();},1600);
     }
-  };
-
-  const handleKey = e => { if (e.key === 'Enter') attempt(); };
-
-  return React.createElement('div', { className: 'lock-screen' },
-    React.createElement('div', { className: 'lock-card' },
-      React.createElement('div', { className: 'lock-logo' }, '👁'),
-      React.createElement('div', { className: 'lock-title' }, 'Nevada Eye Associates'),
-      React.createElement('div', { className: 'lock-sub' }, 'Clinic Team Builder — Staff Access Only'),
-
-      React.createElement('div', { className: 'lock-input-wrap' },
-        React.createElement('input', {
-          ref:         inputRef,
-          className:   `lock-input${error ? ' error' : ''}${shake ? ' shake' : ''}`,
-          type:        show ? 'text' : 'password',
-          placeholder: 'Enter passcode',
-          value:       input,
-          onChange:    e => setInput(e.target.value),
-          onKeyDown:   handleKey,
-          autoComplete:'off',
-          spellCheck:  false,
-        }),
-        React.createElement('button', {
-          className: 'lock-eye',
-          onClick:   () => setShow(p => !p),
-          tabIndex:  -1,
-          title:     show ? 'Hide passcode' : 'Show passcode',
-        }, show ? '🙈' : '👁')
+  }
+  return React.createElement('div',{className:'lock-screen'},
+    React.createElement('div',{className:'lock-card'},
+      React.createElement('div',{className:'lock-logo'},'👁'),
+      React.createElement('div',{className:'lock-title'},'Nevada Eye Associates'),
+      React.createElement('div',{className:'lock-sub'},'Clinic Team Builder — Staff Access Only'),
+      React.createElement('div',{className:'lock-input-wrap'},
+        React.createElement('input',{ref,className:'lock-input'+(err?' error':'')+(shake?' shake':''),type:show?'text':'password',
+          placeholder:'Enter passcode',value:val,autoComplete:'off',spellCheck:false,
+          onChange:e=>setVal(e.target.value),onKeyDown:e=>e.key==='Enter'&&attempt()}),
+        React.createElement('button',{className:'lock-eye',tabIndex:-1,onClick:()=>setShow(p=>!p)},show?'🙈':'👁')
       ),
-
-      React.createElement('div', { className: 'lock-error' }, error),
-
-      React.createElement('button', {
-        className: 'lock-btn',
-        onClick:   attempt,
-        disabled:  !input,
-      }, 'Unlock →'),
-
-      React.createElement('label', { className: 'lock-remember' },
-        React.createElement('input', {
-          type:     'checkbox',
-          checked:  remember,
-          onChange: e => setRemember(e.target.checked),
-        }),
+      React.createElement('div',{className:'lock-error'},err),
+      React.createElement('button',{className:'lock-btn',onClick:attempt,disabled:!val},'Unlock →'),
+      React.createElement('label',{className:'lock-remember'},
+        React.createElement('input',{type:'checkbox',checked:remember,onChange:e=>setRemember(e.target.checked)}),
         'Remember this device'
       ),
-
-      React.createElement('div', { className: 'lock-footer' },
-        'Meadows Eye Associates · Nevada Eye Associates'
-      )
+      React.createElement('div',{className:'lock-footer'},'Meadows Eye Associates · Nevada Eye Associates')
     )
   );
 }
 
+/* ══════════════════════════════════════════════════════════════
+   Root — manages lock gate (one hook only, no violation)
+   ══════════════════════════════════════════════════════════════ */
+function Root(){
+  const [unlocked,setUnlocked]=useState(isOpen);
+  if(!unlocked) return React.createElement(LockScreen,{onUnlock:()=>setUnlocked(true)});
+  return React.createElement(App);
+}
 
-/* ─── Main App ──────────────────────────────────────────────── */
-function App() {
-  const _saved = loadSaved();
-  const [docs,       setDocs]       = useState(_saved.docs  || DOCS_SEED);
-  const [techs,      setTechs]      = useState(_saved.techs || TECHS_SEED);
-  const [drag,       setDrag]       = useState(null);
-  const [dropTarget, setDropTarget] = useState(null);
-  const [search,     setSearch]     = useState('');
-  const [fType,      setFType]      = useState('all');
-  const [fScribe,    setFScribe]    = useState(false);
-  const [fTravel,    setFTravel]    = useState(false);
-  const [addOpen,    setAddOpen]    = useState(false);
-  const [schedOpen,  setSchedOpen]  = useState(null);   // docId
-  const [editLocs,   setEditLocs]   = useState(null);   // docId
-  const [newLocVal,  setNewLocVal]  = useState('');
-  const [newT,       setNewT]       = useState({ name:'', cred:'', l1:'', l2:'', l3:'', types:[], travel:false, scribes:false });
-  const [toast,      setToast]      = useState('');
+/* ══════════════════════════════════════════════════════════════
+   Main App
+   ══════════════════════════════════════════════════════════════ */
+function App(){
+  const saved = lsLoad();
+  const [docs,      setDocs]      = useState(saved.docs  || DOCS_SEED);
+  const [techs,     setTechs]     = useState(saved.techs || TECHS_SEED);
+  const [drag,      setDrag]      = useState(null);
+  const [dropTarget,setDropTarget]= useState(null);
+  const [search,    setSearch]    = useState('');
+  const [fType,     setFType]     = useState('all');
+  const [fScribe,   setFScribe]   = useState(false);
+  const [fTravel,   setFTravel]   = useState(false);
+  const [addOpen,   setAddOpen]   = useState(false);
+  const [schedOpen, setSchedOpen] = useState(null);
+  const [editLocs,  setEditLocs]  = useState(null);
+  const [newLocVal, setNewLocVal] = useState('');
+  const [newT,      setNewT]      = useState({name:'',cred:'',l1:'',l2:'',l3:'',types:[],travel:false,scribes:false});
+  const [toast,     setToast]     = useState('');
+  const [gUser,     setGUser]     = useState(null);
+  const [syncStatus,setSyncStatus]= useState('offline');
+  const [lastBy,    setLastBy]    = useState(null);
 
-  /* ── Firestore real-time sync state ── */
-  const [syncStatus,  setSyncStatus] = useState('offline'); // offline|connecting|syncing|synced|error
-  const [gUser,       setGUser]      = useState(null);      // {name, email, picture, uid}
-  const [lastSyncBy,  setLastSyncBy] = useState(null);      // who last updated: {name, at}
-  const isConfigured = FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey !== 'YOUR_API_KEY';
+  const fileRef      = useRef(null);
+  const syncTimer    = useRef(null);
+  const isSaving     = useRef(false);
+  const unsubListen  = useRef(null);
+  const unsubAuth    = useRef(null);
 
-  const syncTimerRef    = useRef(null);
-  const isSavingRef     = useRef(false);   // suppress echo from own writes
-  const unsubListenRef  = useRef(null);    // Firestore onSnapshot unsubscribe
-  const unsubAuthRef    = useRef(null);    // Auth onAuthStateChanged unsubscribe
+  /* toast */
+  const showToast = useCallback(msg=>{ setToast(msg); setTimeout(()=>setToast(''),2800); },[]);
 
-  /* ── Firestore write (debounced 800 ms) ── */
-  const scheduleFirestoreSave = useCallback((nextDocs, nextTechs) => {
-    const fb = getFirebase();
-    if (!fb || !_auth?.currentUser) return;
+  /* save to localStorage + Firestore */
+  function persist(nextDocs,nextTechs){
+    lsSave({docs:nextDocs,techs:nextTechs});
+    if(!_auth||!_auth.currentUser) return;
     setSyncStatus('syncing');
-    clearTimeout(syncTimerRef.current);
-    syncTimerRef.current = setTimeout(async () => {
-      try {
-        isSavingRef.current = true;
-        const user = _auth.currentUser;
-        await _db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC_ID).set({
-          docs:          nextDocs,
-          techs:         nextTechs,
-          updatedAt:     firebase.firestore.FieldValue.serverTimestamp(),
-          updatedByUid:  user.uid,
-          updatedByName: user.displayName || user.email,
+    clearTimeout(syncTimer.current);
+    syncTimer.current=setTimeout(async()=>{
+      try{
+        isSaving.current=true;
+        const u=_auth.currentUser;
+        await _db.collection(FS_COL).doc(FS_DOC).set({
+          docs:nextDocs,techs:nextTechs,
+          updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+          updatedByUid:u.uid, updatedByName:u.displayName||u.email,
         });
         setSyncStatus('synced');
-      } catch (e) {
-        isSavingRef.current = false;
-        setSyncStatus('error');
-      }
-    }, 800);
-  }, []);
+      } catch(e){ isSaving.current=false; setSyncStatus('error'); }
+    },800);
+  }
 
-  /* ── Attach Firestore real-time listener ── */
-  const attachListener = useCallback((user) => {
-    if (unsubListenRef.current) unsubListenRef.current(); // detach previous
-    const ref = _db.collection(FIRESTORE_COLLECTION).doc(FIRESTORE_DOC_ID);
-    unsubListenRef.current = ref.onSnapshot(snap => {
-      if (!snap.exists) {
-        // First time — upload local data to Firestore
-        const saved = loadSaved();
-        const payload = {
-          docs:          saved.docs  || DOCS_SEED,
-          techs:         saved.techs || TECHS_SEED,
-          updatedAt:     firebase.firestore.FieldValue.serverTimestamp(),
-          updatedByUid:  user.uid,
-          updatedByName: user.displayName || user.email,
-        };
-        isSavingRef.current = true;
-        ref.set(payload).catch(() => { isSavingRef.current = false; });
+  /* wrapped setters that auto-persist */
+  function updDocs(fn){
+    setDocs(prev=>{ const next=typeof fn==='function'?fn(prev):fn; persist(next,techs); return next; });
+  }
+  function updTechs(fn){
+    setTechs(prev=>{ const next=typeof fn==='function'?fn(prev):fn; persist(docs,next); return next; });
+  }
+
+  /* Firestore listener */
+  const attachListener = useCallback(user=>{
+    if(unsubListen.current){ unsubListen.current(); unsubListen.current=null; }
+    const ref=_db.collection(FS_COL).doc(FS_DOC);
+    unsubListen.current=ref.onSnapshot(snap=>{
+      if(!snap.exists){
+        const s=lsLoad();
+        isSaving.current=true;
+        ref.set({docs:s.docs||DOCS_SEED,techs:s.techs||TECHS_SEED,
+          updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
+          updatedByUid:user.uid,updatedByName:user.displayName||user.email,
+        }).catch(()=>{ isSaving.current=false; });
         setSyncStatus('synced');
-        showToast('✅ Connected to Firestore — your data has been uploaded.');
+        showToast('✅ Connected to Firestore — data uploaded.');
         return;
       }
-
-      // Suppress echo from our own writes
-      if (isSavingRef.current) { isSavingRef.current = false; setSyncStatus('synced'); return; }
-
-      const data = snap.data();
-      if (data.docs && data.techs) {
-        setDocs(data.docs);
-        setTechs(data.techs);
-        saveState(data.docs, data.techs);
+      if(isSaving.current){ isSaving.current=false; setSyncStatus('synced'); return; }
+      const d=snap.data();
+      if(d.docs&&d.techs){
+        setDocs(d.docs); setTechs(d.techs); lsSave({docs:d.docs,techs:d.techs});
         setSyncStatus('synced');
-        if (data.updatedByUid && data.updatedByUid !== user.uid) {
-          const name = data.updatedByName || 'Someone';
-          const at   = data.updatedAt?.toDate ? data.updatedAt.toDate().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}) : '';
-          setLastSyncBy({ name, at });
-          showToast(`🔄 Schedule updated by ${name}${at ? ' at ' + at : ''}`);
-        } else {
-          setLastSyncBy(null);
-        }
+        if(d.updatedByUid&&d.updatedByUid!==user.uid){
+          const name=d.updatedByName||'Someone';
+          const at=d.updatedAt&&d.updatedAt.toDate?d.updatedAt.toDate().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}):'';
+          setLastBy({name,at}); showToast('🔄 Updated by '+name+(at?' at '+at:''));
+        } else { setLastBy(null); }
       }
-    }, () => setSyncStatus('error'));
-  }, []);
+    },()=>setSyncStatus('error'));
+  },[showToast]);
 
-  /* ── Firebase Auth state listener (init on mount) ── */
-  useEffect(() => {
-    if (!isConfigured) return;
-    const fb = getFirebase();
-    if (!fb) return;
-
-    unsubAuthRef.current = _auth.onAuthStateChanged(user => {
-      if (user) {
-        setGUser({ name: user.displayName, email: user.email, picture: user.photoURL, uid: user.uid });
+  /* auth listener */
+  useEffect(()=>{
+    if(!getFB()) return;
+    unsubAuth.current=_auth.onAuthStateChanged(user=>{
+      if(user){
+        setGUser({name:user.displayName,email:user.email,picture:user.photoURL,uid:user.uid});
         setSyncStatus('connecting');
         attachListener(user);
       } else {
-        setGUser(null);
-        setSyncStatus('offline');
-        if (unsubListenRef.current) { unsubListenRef.current(); unsubListenRef.current = null; }
+        setGUser(null); setSyncStatus('offline');
+        if(unsubListen.current){ unsubListen.current(); unsubListen.current=null; }
       }
     });
-
-    return () => {
-      if (unsubAuthRef.current)  unsubAuthRef.current();
-      if (unsubListenRef.current) unsubListenRef.current();
-      clearTimeout(syncTimerRef.current);
+    return ()=>{
+      if(unsubAuth.current) unsubAuth.current();
+      if(unsubListen.current) unsubListen.current();
+      clearTimeout(syncTimer.current);
     };
-  }, [attachListener]);
+  },[attachListener]);
 
-  /* ── Auth actions ── */
-  const handleSignIn = async () => {
-    const fb = getFirebase();
-    if (!fb) return;
-    try {
-      const provider = new firebase.auth.GoogleAuthProvider();
-      await _auth.signInWithPopup(provider);
-    } catch { showToast('Sign-in failed — please try again.'); }
+  const handleSignIn = async()=>{
+    if(!getFB()) return;
+    try{ await _auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
+    catch{ showToast('Sign-in failed — please try again.'); }
   };
-
-  const handleSignOut = async () => {
-    clearTimeout(syncTimerRef.current);
-    if (unsubListenRef.current) { unsubListenRef.current(); unsubListenRef.current = null; }
-    if (_auth) await _auth.signOut();
-    setGUser(null); setLastSyncBy(null); setSyncStatus('offline');
+  const handleSignOut = async()=>{
+    clearTimeout(syncTimer.current);
+    if(unsubListen.current){ unsubListen.current(); unsubListen.current=null; }
+    if(_auth) await _auth.signOut();
+    setGUser(null); setLastBy(null); setSyncStatus('offline');
     showToast('Signed out of Firestore sync.');
   };
 
   /* derived */
-  const pool = techs.filter(t =>
+  const pool = techs.filter(t=>
     !t.assignedTo &&
-    (!search || t.name.toLowerCase().includes(search.toLowerCase())) &&
-    (fType==='all' || t.types.includes(fType)) &&
-    (!fScribe || t.scribes) &&
-    (!fTravel || t.travel)
+    (!search||t.name.toLowerCase().includes(search.toLowerCase())) &&
+    (fType==='all'||t.types.includes(fType)) &&
+    (!fScribe||t.scribes) &&
+    (!fTravel||t.travel)
   );
-  const dTechs  = id => techs.filter(t => t.assignedTo === id);
-  const getCov  = doc => covStatus(doc.id, dTechs(doc.id).length);
-  const totAssigned   = techs.filter(t => t.assignedTo).length;
-  const totUnassigned = techs.filter(t => !t.assignedTo).length;
-  const notCovered    = docs.filter(d => getCov(d).level !== 'ok').length;
-  const atRisk        = docs.filter(d => getCov(d).level === 'danger').length;
+  const dTechs       = id=>techs.filter(t=>t.assignedTo===id);
+  const getCov       = doc=>covStatus(doc.id,dTechs(doc.id).length);
+  const totAssigned  = techs.filter(t=>t.assignedTo).length;
+  const totFree      = techs.filter(t=>!t.assignedTo).length;
+  const notCovered   = docs.filter(d=>getCov(d).level!=='ok').length;
+  const atRisk       = docs.filter(d=>getCov(d).level==='danger').length;
 
   /* drag */
-  const onDragStart = (e, techId, fromDoc) => { setDrag({techId, fromDoc: fromDoc||null}); e.dataTransfer.effectAllowed='move'; };
-  const onDragOver  = (e, target) => { e.preventDefault(); setDropTarget(target); };
-  const onDragEnd   = () => { setDrag(null); setDropTarget(null); };
-  const onDrop = (e, toDocId) => {
+  const onDragStart=(e,techId,fromDoc)=>{ setDrag({techId,fromDoc:fromDoc||null}); e.dataTransfer.effectAllowed='move'; };
+  const onDragOver =(e,target)=>{ e.preventDefault(); setDropTarget(target); };
+  const onDragEnd  =()=>{ setDrag(null); setDropTarget(null); };
+  const onDrop=(e,toDocId)=>{
     e.preventDefault(); setDropTarget(null);
-    if (!drag) return;
-    updateTechs(p => p.map(t => t.id===drag.techId ? {...t, assignedTo: toDocId||null} : t));
+    if(!drag)return;
+    updTechs(p=>p.map(t=>t.id===drag.techId?{...t,assignedTo:toDocId||null}:t));
     setDrag(null);
   };
-  const removeTech = id => updateTechs(p => p.map(t => t.id===id ? {...t, assignedTo:null} : t));
+  const removeTech=id=>updTechs(p=>p.map(t=>t.id===id?{...t,assignedTo:null}:t));
 
   /* schedule */
-  const toggleSched = (docId, loc, day) => {
-    updateDocs(p => p.map(d => {
-      if (d.id!==docId) return d;
-      const s = {...d.sched};
-      const days = new Set(s[loc] ? s[loc].split(', ') : []);
-      days.has(day) ? days.delete(day) : days.add(day);
-      const ord = DAYS.filter(dd => days.has(dd));
-      if (!ord.length) delete s[loc]; else s[loc] = ord.join(', ');
-      return {...d, sched:s};
+  const toggleSched=(docId,loc,day)=>{
+    updDocs(p=>p.map(d=>{
+      if(d.id!==docId)return d;
+      const s={...d.sched};
+      const days=new Set(s[loc]?s[loc].split(', '):[]);
+      days.has(day)?days.delete(day):days.add(day);
+      const ord=DAYS.filter(dd=>days.has(dd));
+      if(!ord.length)delete s[loc]; else s[loc]=ord.join(', ');
+      return{...d,sched:s};
     }));
   };
 
-  /* editable locations */
-  const openEditLocs = docId => { setEditLocs(docId); setSchedOpen(null); setNewLocVal(''); };
-  const closeEditLocs = () => { setEditLocs(null); setNewLocVal(''); };
-  const addLoc = (docId) => {
-    const v = newLocVal.trim();
-    if (!v) return;
-    updateDocs(p => p.map(d => d.id===docId ? {...d, locs:[...d.locs, v]} : d));
+  /* locations */
+  const openEditLocs=docId=>{ setEditLocs(docId); setSchedOpen(null); setNewLocVal(''); };
+  const closeEditLocs=()=>{ setEditLocs(null); setNewLocVal(''); };
+  const addLoc=docId=>{
+    const v=newLocVal.trim(); if(!v)return;
+    updDocs(p=>p.map(d=>d.id===docId?{...d,locs:[...d.locs,v]}:d));
     setNewLocVal('');
   };
-  const removeLoc = (docId, loc) => {
-    updateDocs(p => p.map(d => {
-      if (d.id!==docId) return d;
-      const sched = {...d.sched}; delete sched[loc];
-      return {...d, locs: d.locs.filter(l=>l!==loc), sched};
+  const removeLoc=(docId,loc)=>{
+    updDocs(p=>p.map(d=>{
+      if(d.id!==docId)return d;
+      const sched={...d.sched}; delete sched[loc];
+      return{...d,locs:d.locs.filter(l=>l!==loc),sched};
     }));
-    if (schedOpen === docId) setSchedOpen(null);
+    if(schedOpen===docId)setSchedOpen(null);
   };
 
   /* add tech */
-  const addTech = () => {
-    if (!newT.name.trim()) return;
-    const locs = [newT.l1, newT.l2, newT.l3].filter(Boolean);
-    updateTechs(p => [...p, {id:'u'+Date.now(), name:newT.name, cred:newT.cred, locs, types:newT.types, travel:newT.travel, scribes:newT.scribes, assignedTo:null}]);
+  const addTech=()=>{
+    if(!newT.name.trim())return;
+    const locs=[newT.l1,newT.l2,newT.l3].filter(Boolean);
+    updTechs(p=>[...p,{id:'u'+Date.now(),name:newT.name,cred:newT.cred,locs,types:newT.types,travel:newT.travel,scribes:newT.scribes,assignedTo:null}]);
     setNewT({name:'',cred:'',l1:'',l2:'',l3:'',types:[],travel:false,scribes:false});
-    setAddOpen(false);
-    showToast('Technician added to pool.');
+    setAddOpen(false); showToast('Technician added to pool.');
   };
 
   /* export */
-  const handleExport = () => {
-    const data = { version:2, exportedAt: new Date().toISOString(), docs, techs };
-    const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href = url;
-    a.download = 'clinic-teams-' + new Date().toISOString().slice(0,10) + '.json';
+  const handleExport=()=>{
+    const blob=new Blob([JSON.stringify({version:2,exportedAt:new Date().toISOString(),docs,techs},null,2)],{type:'application/json'});
+    const url=URL.createObjectURL(blob);
+    const a=document.createElement('a'); a.href=url;
+    a.download='clinic-teams-'+new Date().toISOString().slice(0,10)+'.json';
     document.body.appendChild(a); a.click(); document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    showToast('Schedule exported successfully.');
+    URL.revokeObjectURL(url); showToast('Schedule exported.');
   };
 
   /* import */
-  const handleImportFile = e => {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = ev => {
-      try {
-        const data = JSON.parse(ev.target.result);
-        if (data.docs && data.techs) {
-          setDocs(data.docs); setTechs(data.techs);
-          saveState(data.docs, data.techs);
-          scheduleFirestoreSave(data.docs, data.techs);
-          setSchedOpen(null); setEditLocs(null); setDrag(null);
-          showToast('Schedule imported successfully.');
-        } else { alert('Invalid file — please use a file exported from this tool.'); }
-      } catch { alert('Could not read file. Make sure it is a valid JSON file.'); }
+  const handleImport=e=>{
+    const file=e.target.files[0]; if(!file)return;
+    const reader=new FileReader();
+    reader.onload=ev=>{
+      try{
+        const d=JSON.parse(ev.target.result);
+        if(d.docs&&d.techs){ setDocs(d.docs); setTechs(d.techs); persist(d.docs,d.techs); showToast('Imported successfully.'); }
+        else alert('Invalid file.');
+      } catch{ alert('Could not read file.'); }
     };
-    reader.readAsText(file);
-    e.target.value = '';
+    reader.readAsText(file); e.target.value='';
   };
 
   /* reset */
-  const handleReset = () => {
-    if (!window.confirm('Reset all team assignments and schedules to defaults?')) return;
+  const handleReset=()=>{
+    if(!window.confirm('Reset all assignments to defaults?'))return;
     setDocs(DOCS_SEED); setTechs(TECHS_SEED);
-    saveState(DOCS_SEED, TECHS_SEED);
-    scheduleFirestoreSave(DOCS_SEED, TECHS_SEED);
+    persist(DOCS_SEED,TECHS_SEED);
     setSchedOpen(null); setEditLocs(null); setDrag(null);
     showToast('Reset to defaults.');
   };
 
-  /* ─── render ──────────────────────────────────────────────── */
-  return React.createElement(Fragment, null,
+  /* ── Sync button rendering helper ── */
+  const syncBtn = !gUser
+    ? React.createElement('button',{className:'sync-btn sync-offline',onClick:handleSignIn,title:'Sign in with Google to enable real-time sync'},
+        React.createElement('div',{className:'sync-dot dot-offline'}), '🔴 Sign in to sync')
+    : React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
+        React.createElement('button',{
+          className:'sync-btn '+(syncStatus==='syncing'||syncStatus==='connecting'?'sync-syncing':syncStatus==='error'?'sync-error':'sync-connected'),
+          title:'Signed in as '+gUser.email+' — click to sign out',
+          onClick:handleSignOut,
+        },
+          React.createElement('div',{className:'sync-dot '+(syncStatus==='connecting'||syncStatus==='syncing'?'dot-busy':syncStatus==='error'?'dot-error':'dot-ok')}),
+          syncStatus==='connecting'?'🔄 Connecting…':syncStatus==='syncing'?'🔄 Saving…':syncStatus==='error'?'⚠ Sync error':'🟢 Live synced'
+        ),
+        gUser.picture&&React.createElement('img',{src:gUser.picture,style:{width:22,height:22,borderRadius:'50%',border:'2px solid #d1d5db'},title:gUser.email}),
+        React.createElement('span',{className:'sync-user',title:gUser.email},gUser.name||gUser.email)
+      );
 
-    /* hidden file input for import */
-    React.createElement('input', { ref:fileRef, type:'file', accept:'.json', style:{display:'none'}, onChange:handleImportFile }),
+  /* ════════════════════════════════════════════════════════════
+     RENDER
+     ════════════════════════════════════════════════════════════ */
+  return React.createElement(Fragment,null,
 
-    /* print header (only visible when printing) */
-    React.createElement('div', {className:'print-header'},
-      React.createElement('h1', null, 'Nevada Eye Associates — Clinic Team Builder'),
-      React.createElement('p', null, 'Printed on ' + new Date().toLocaleDateString('en-US', {weekday:'long',year:'numeric',month:'long',day:'numeric'}))
+    React.createElement('input',{ref:fileRef,type:'file',accept:'.json',style:{display:'none'},onChange:handleImport}),
+    React.createElement('div',{className:'print-header'},
+      React.createElement('h1',null,'Nevada Eye Associates — Clinic Team Builder'),
+      React.createElement('p',null,'Printed '+new Date().toLocaleDateString('en-US',{weekday:'long',year:'numeric',month:'long',day:'numeric'}))
     ),
 
-    /* Setup banner — shown when Firebase config not yet filled in */
-    !isConfigured && React.createElement('div', {className:'setup-banner'},
-      React.createElement('span', null, '⚙️'),
-      React.createElement('span', null,
-        'Firestore sync is not yet configured. ',
-        React.createElement('a', {href:'https://console.firebase.google.com', target:'_blank'}, 'Open Firebase Console'),
-        ', create a project, enable Firestore + Google Auth, then paste your ',
-        React.createElement('strong', null, 'firebaseConfig'),
-        ' into the FIREBASE_CONFIG constant at the top of this file.'
-      )
-    ),
-
-    /* "Last updated by" banner — shown after remote sync */
-    (gUser && lastSyncBy) && React.createElement('div', {className:'setup-banner', style:{background:'#EFF6FF',borderColor:'#BFDBFE',color:'#1E40AF',margin:'8px 14px 0'}},
-      React.createElement('span', null, '🔄'),
-      React.createElement('span', null,
-        'Schedule updated by ',
-        React.createElement('strong', null, lastSyncBy.name),
-        lastSyncBy.at ? ' at ' + lastSyncBy.at : '',
-        ' — all changes synced in real time.'
-      )
-    ),
-
-    /* HEADER */
-    React.createElement('div', {className:'header'},
-      React.createElement('div', null,
-        React.createElement('div', {className:'header-brand'}, 'Clinic Team Builder'),
-        React.createElement('div', {className:'header-sub'}, 'Nevada Eye Associates — Staffing Dashboard')
+    /* ── HEADER ── */
+    React.createElement('div',{className:'header'},
+      React.createElement('div',null,
+        React.createElement('div',{className:'header-brand'},'Clinic Team Builder'),
+        React.createElement('div',{className:'header-sub'},'Nevada Eye Associates — Staffing Dashboard')
       ),
-      React.createElement('div', {className:'header-divider'}),
-      [['Doctors', docs.length, null],
-       ['Technicians', techs.length, null],
-       ['Assigned', totAssigned, totAssigned===techs.length?'#059669':'#111827'],
-       ['At Risk', atRisk, atRisk>0?'#DC2626':'#059669'],
-       ['Not Covered', notCovered, notCovered>0?'#D97706':'#059669'],
-      ].map(([label, val, color]) =>
-        React.createElement('div', {key:label, className:'stat-box'},
-          React.createElement('div', {className:'stat-val', style:{color:color||'#111827'}}, val),
-          React.createElement('div', {className:'stat-lbl'}, label)
-        )
-      ),
-      React.createElement('div', {className:'header-divider'}),
-      React.createElement('div', {style:{display:'flex',gap:6,alignItems:'center'}},
-        /* Firestore real-time sync button */
-        !gUser
-          ? React.createElement('button', {
-              className: 'sync-btn sync-offline',
-              onClick:   handleSignIn,
-              title:     isConfigured ? 'Sign in with Google to enable real-time Firestore sync' : 'Configure FIREBASE_CONFIG first',
-              disabled:  !isConfigured,
-              style:     !isConfigured ? {opacity:.5,cursor:'not-allowed'} : {},
-            },
-              React.createElement('div', {className:'sync-dot dot-offline'}),
-              '🔴 Sign in to sync'
-            )
-          : React.createElement('div', {style:{display:'flex',alignItems:'center',gap:6}},
-              React.createElement('button', {
-                className: 'sync-btn ' + (syncStatus==='syncing'||syncStatus==='connecting'?'sync-syncing':syncStatus==='error'?'sync-error':'sync-connected'),
-                title:     `Signed in as ${gUser.email} — click to sign out`,
-                onClick:   handleSignOut,
-              },
-                React.createElement('div', {className:'sync-dot ' + (syncStatus==='syncing'||syncStatus==='connecting'?'dot-busy':syncStatus==='error'?'dot-error':'dot-ok')}),
-                syncStatus==='connecting'?'🔄 Connecting…':syncStatus==='syncing'?'🔄 Saving…':syncStatus==='error'?'⚠ Sync error':'🟢 Live synced'
-              ),
-              gUser.picture && React.createElement('img', {src:gUser.picture, style:{width:22,height:22,borderRadius:'50%',border:'2px solid #d1d5db'}, title:gUser.email}),
-              React.createElement('span', {className:'sync-user', title:gUser.email}, gUser.name||gUser.email)
-            ),
-
-        React.createElement('div', {style:{width:1,height:20,background:'#e5e7eb',margin:'0 2px'}}),
-        React.createElement('button', {className:'io-btn import-btn', onClick:()=>fileRef.current.click()}, '↑ Import'),
-        React.createElement('button', {className:'io-btn export-btn', onClick:handleExport}, '↓ Export'),
-        React.createElement('button', {className:'io-btn', style:{color:'#374151'}, onClick:()=>window.print()}, '🖨 Print'),
-        React.createElement('button', {className:'io-btn', style:{color:'#6b7280',fontSize:11}, onClick:handleReset}, 'Reset')
+      React.createElement('div',{className:'header-divider'}),
+      [['Doctors',docs.length,null],['Technicians',techs.length,null],
+       ['Assigned',totAssigned,totAssigned===techs.length?'#059669':'#111827'],
+       ['At Risk',atRisk,atRisk>0?'#DC2626':'#059669'],
+       ['Not Covered',notCovered,notCovered>0?'#D97706':'#059669'],
+      ].map(([l,v,c])=>React.createElement('div',{key:l,className:'stat-box'},
+        React.createElement('div',{className:'stat-val',style:{color:c||'#111827'}},v),
+        React.createElement('div',{className:'stat-lbl'},l)
+      )),
+      React.createElement('div',{className:'header-divider'}),
+      React.createElement('div',{style:{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}},
+        syncBtn,
+        React.createElement('div',{style:{width:1,height:20,background:'#e5e7eb',margin:'0 2px'}}),
+        React.createElement('button',{className:'io-btn',onClick:()=>fileRef.current.click()},'↑ Import'),
+        React.createElement('button',{className:'io-btn export-btn',onClick:handleExport},'↓ Export'),
+        React.createElement('button',{className:'io-btn',onClick:()=>window.print()},'🖨 Print'),
+        React.createElement('button',{className:'io-btn',style:{color:'#6b7280',fontSize:11},onClick:handleReset},'Reset')
       )
     ),
 
-    /* MAIN */
-    React.createElement('div', {className:'main'},
+    /* last-synced-by banner */
+    (gUser&&lastBy)&&React.createElement('div',{className:'sync-banner'},
+      '🔄 Schedule updated by ',
+      React.createElement('strong',null,lastBy.name),
+      lastBy.at?' at '+lastBy.at:'',' — synced in real time.'
+    ),
 
-      /* ── SIDEBAR ─────────────────────────────────────────── */
-      React.createElement('div', {
-        className:'sidebar',
-        onDragOver: e=>onDragOver(e,'pool'),
-        onDrop:     e=>onDrop(e,null),
-      },
-        React.createElement('div', {className:'sidebar-hd'},
-          React.createElement('div', {className:'sidebar-hd-row'},
-            React.createElement('span', {className:'sidebar-title'}, 'Technician Pool'),
-            React.createElement('span', {className:'count-pill'}, pool.length,' shown · ',totUnassigned,' free')
+    /* ── MAIN ── */
+    React.createElement('div',{className:'main'},
+
+      /* SIDEBAR */
+      React.createElement('div',{className:'sidebar',onDragOver:e=>onDragOver(e,'pool'),onDrop:e=>onDrop(e,null)},
+        React.createElement('div',{className:'sidebar-hd'},
+          React.createElement('div',{className:'sidebar-hd-row'},
+            React.createElement('span',{className:'sidebar-title'},'Technician Pool'),
+            React.createElement('span',{className:'count-pill'},pool.length,' shown · ',totFree,' free')
           ),
-          React.createElement('input', {type:'text', placeholder:'Search by name…', value:search, onChange:e=>setSearch(e.target.value), style:{marginBottom:7}}),
-          React.createElement('div', {className:'filter-row'},
-            React.createElement('select', {value:fType, onChange:e=>setFType(e.target.value), style:{flex:1,fontSize:11}},
+          React.createElement('input',{type:'text',placeholder:'Search by name…',value:search,onChange:e=>setSearch(e.target.value),style:{marginBottom:7}}),
+          React.createElement('div',{className:'filter-row'},
+            React.createElement('select',{value:fType,onChange:e=>setFType(e.target.value),style:{flex:1,fontSize:11}},
               React.createElement('option',{value:'all'},'All clinic types'),
-              CTYPES.map(ct => React.createElement('option',{key:ct,value:ct},ct))
+              CTYPES.map(ct=>React.createElement('option',{key:ct,value:ct},ct))
             ),
-            React.createElement('button', {
-              className:'filter-btn',
-              onClick:()=>setFScribe(!fScribe),
-              style:{background:fScribe?'#EFF6FF':'#fff',color:fScribe?'#1D4ED8':'#374151',borderColor:fScribe?'#BFDBFE':'#d1d5db'}
-            },'Scribe'),
-            React.createElement('button', {
-              className:'filter-btn',
-              onClick:()=>setFTravel(!fTravel),
-              style:{background:fTravel?'#ECFDF5':'#fff',color:fTravel?'#065F46':'#374151',borderColor:fTravel?'#A7F3D0':'#d1d5db'}
-            },'Travels')
+            React.createElement('button',{className:'filter-btn',onClick:()=>setFScribe(p=>!p),
+              style:{background:fScribe?'#EFF6FF':'#fff',color:fScribe?'#1D4ED8':'#374151',borderColor:fScribe?'#BFDBFE':'#d1d5db'}},'Scribe'),
+            React.createElement('button',{className:'filter-btn',onClick:()=>setFTravel(p=>!p),
+              style:{background:fTravel?'#ECFDF5':'#fff',color:fTravel?'#065F46':'#374151',borderColor:fTravel?'#A7F3D0':'#d1d5db'}},'Travels')
           )
         ),
-
-        /* pool list */
-        React.createElement('div', {className:'pool-list'+(dropTarget==='pool'?' drag-over':'')},
+        React.createElement('div',{className:'pool-list'+(dropTarget==='pool'?' drag-over':'')},
           pool.length===0
-            ? React.createElement('div',{className:'empty-state'},
-                search||fType!=='all'||fScribe||fTravel?'No technicians match your filters.':'All technicians have been assigned.')
-            : pool.map(tech =>
-                React.createElement('div', {
-                  key:tech.id,
-                  className:'pool-card'+(drag?.techId===tech.id?' dragging':''),
-                  draggable:true,
-                  onDragStart:e=>onDragStart(e,tech.id,null),
-                  onDragEnd:onDragEnd,
-                },
-                  React.createElement('div',{className:'pool-card-top'},
-                    React.createElement('div',null,
-                      React.createElement('span',{className:'pool-name'},tech.name),
-                      tech.cred&&React.createElement('span',{className:'pool-cred'},tech.cred)
-                    ),
-                    React.createElement('div',{style:{display:'flex',gap:3,flexShrink:0}},
-                      tech.travel&&React.createElement('span',{className:'tag tag-travel',title:tech.tNote||''},tech.tNote||'travels'),
-                      tech.scribes&&React.createElement('span',{className:'tag tag-scribe'},'scribe')
-                    )
+            ? React.createElement('div',{className:'empty-state'},search||fType!=='all'||fScribe||fTravel?'No technicians match your filters.':'All technicians have been assigned.')
+            : pool.map(tech=>React.createElement('div',{
+                key:tech.id,className:'pool-card'+(drag&&drag.techId===tech.id?' dragging':''),
+                draggable:true,onDragStart:e=>onDragStart(e,tech.id,null),onDragEnd,
+              },
+                React.createElement('div',{className:'pool-card-top'},
+                  React.createElement('div',null,
+                    React.createElement('span',{className:'pool-name'},tech.name),
+                    tech.cred&&React.createElement('span',{className:'pool-cred'},tech.cred)
                   ),
-                  React.createElement('div',{className:'tag-row'},
-                    tech.types.map(ct=>React.createElement('span',{key:ct,className:'tag tag-type'},ct))
-                  ),
-                  React.createElement('div',{className:'pool-locs'},tech.locs.slice(0,2).join(' · '))
-                )
-              )
+                  React.createElement('div',{style:{display:'flex',gap:3,flexShrink:0}},
+                    tech.travel&&React.createElement('span',{className:'tag tag-travel',title:tech.tNote||''},tech.tNote||'travels'),
+                    tech.scribes&&React.createElement('span',{className:'tag tag-scribe'},'scribe')
+                  )
+                ),
+                React.createElement('div',{className:'tag-row'},tech.types.map(ct=>React.createElement('span',{key:ct,className:'tag tag-type'},ct))),
+                React.createElement('div',{className:'pool-locs'},tech.locs.slice(0,2).join(' · '))
+              ))
         ),
-
-        /* sidebar footer: add tech */
         React.createElement('div',{className:'sidebar-footer'},
           !addOpen
             ? React.createElement('button',{onClick:()=>setAddOpen(true),style:{width:'100%'}},'+ Add new technician')
@@ -924,16 +744,12 @@ function App() {
                 React.createElement('div',{className:'add-form-title'},'New technician'),
                 React.createElement('input',{placeholder:'Full name *',value:newT.name,onChange:e=>setNewT(p=>({...p,name:e.target.value}))}),
                 React.createElement('input',{placeholder:'Credentials (COA, OSC…)',value:newT.cred,onChange:e=>setNewT(p=>({...p,cred:e.target.value}))}),
-                React.createElement('div',{className:'locs-row'},
-                  ['l1','l2','l3'].map((k,i)=>React.createElement('input',{key:k,placeholder:`Loc ${i+1}`,value:newT[k],onChange:e=>setNewT(p=>({...p,[k]:e.target.value}))}))
-                ),
+                React.createElement('div',{className:'locs-row'},['l1','l2','l3'].map((k,i)=>React.createElement('input',{key:k,placeholder:'Loc '+(i+1),value:newT[k],onChange:e=>setNewT(p=>({...p,[k]:e.target.value}))}))),
                 React.createElement('div',{className:'add-form-section'},'Clinic types:'),
-                React.createElement('div',{className:'type-toggles'},
-                  CTYPES.map(ct=>{
-                    const sel=newT.types.includes(ct);
-                    return React.createElement('button',{key:ct,className:'type-toggle-btn'+(sel?' active':''),onClick:()=>setNewT(p=>({...p,types:sel?p.types.filter(x=>x!==ct):[...p.types,ct]}))},ct);
-                  })
-                ),
+                React.createElement('div',{className:'type-toggles'},CTYPES.map(ct=>{
+                  const sel=newT.types.includes(ct);
+                  return React.createElement('button',{key:ct,className:'type-toggle-btn'+(sel?' active':''),onClick:()=>setNewT(p=>({...p,types:sel?p.types.filter(x=>x!==ct):[...p.types,ct]}))},ct);
+                })),
                 React.createElement('div',{className:'checkbox-row'},
                   React.createElement('label',null,React.createElement('input',{type:'checkbox',checked:newT.travel,onChange:e=>setNewT(p=>({...p,travel:e.target.checked}))}),'Willing to travel'),
                   React.createElement('label',null,React.createElement('input',{type:'checkbox',checked:newT.scribes,onChange:e=>setNewT(p=>({...p,scribes:e.target.checked}))}),'Scribes')
@@ -944,174 +760,104 @@ function App() {
                 )
               )
         )
-      ), // end sidebar
+      ),
 
-      /* ── DOCTOR GRID ────────────────────────────────────── */
-      React.createElement('div', {className:'doctor-grid'},
-        React.createElement('div', {className:'grid-inner'},
-          docs.map(doc => {
-            const s    = SS[doc.spec] || {a:'#6b7280',bg:'#f9fafb',bd:'#e5e7eb',t:'#374151',sh:'?'};
-            const dt   = dTechs(doc.id);
-            const cov  = getCov(doc);
-            const isTgt= dropTarget === doc.id;
-            const isEditingLocs = editLocs === doc.id;
-
-            return React.createElement('div', {
-              key: doc.id,
-              className: 'doc-card' + (isTgt?' drop-target':''),
-              style: {'--accent': s.a},
-              onDragOver: e=>onDragOver(e, doc.id),
-              onDrop:     e=>onDrop(e, doc.id),
+      /* DOCTOR GRID */
+      React.createElement('div',{className:'doctor-grid'},
+        React.createElement('div',{className:'grid-inner'},
+          docs.map(doc=>{
+            const s=SS[doc.spec]||{a:'#6b7280',bg:'#f9fafb',bd:'#e5e7eb',t:'#374151',sh:'?'};
+            const dt=dTechs(doc.id);
+            const cov=getCov(doc);
+            const isTgt=dropTarget===doc.id;
+            const isEL=editLocs===doc.id;
+            return React.createElement('div',{
+              key:doc.id,className:'doc-card'+(isTgt?' drop-target':''),
+              onDragOver:e=>onDragOver(e,doc.id),onDrop:e=>onDrop(e,doc.id),
             },
-
-              /* doctor header */
-              React.createElement('div', {className:'doc-header', style:{background:s.bg,borderColor:s.bd}},
-                React.createElement('div', {className:'doc-avatar', style:{background:s.a}}, s.sh),
-                React.createElement('div', {style:{flex:1}},
-                  React.createElement('div', {className:'doc-name', style:{color:s.t}}, doc.name, ', ', doc.cred),
-                  React.createElement('div', {className:'doc-spec', style:{color:s.a}}, doc.spec)
+              React.createElement('div',{className:'doc-header',style:{background:s.bg,borderColor:s.bd}},
+                React.createElement('div',{className:'doc-avatar',style:{background:s.a}},s.sh),
+                React.createElement('div',{style:{flex:1}},
+                  React.createElement('div',{className:'doc-name',style:{color:s.t}},doc.name,', ',doc.cred),
+                  React.createElement('div',{className:'doc-spec',style:{color:s.a}},doc.spec)
                 ),
-                React.createElement('span', {
-                  className: 'doc-badge badge-'+cov.level,
-                  title: `Required: ${cov.target} techs${cov.min!==cov.target?' (minimum '+cov.min+')':''}`
-                }, BadgeLabel(cov))
+                React.createElement('span',{className:'doc-badge badge-'+cov.level,title:'Required: '+cov.target+' techs'},BadgeLabel(cov))
               ),
-
-              /* locations */
-              React.createElement('div', {className:'doc-section'},
-                React.createElement('div', {className:'section-label'},
-                  React.createElement('span', null, 'Clinic locations'),
-                  React.createElement('div', {className:'section-actions'},
-                    React.createElement('button', {
-                      className:'link-btn',
-                      style:{color: isEditingLocs?'#991B1B':s.a},
-                      onClick:()=> isEditingLocs ? closeEditLocs() : openEditLocs(doc.id)
-                    }, isEditingLocs ? '✕ Done editing' : '✎ Edit'),
-                    !isEditingLocs && React.createElement('button', {
-                      className:'link-btn',
-                      style:{color:s.a},
-                      onClick:()=>setSchedOpen(schedOpen===doc.id?null:doc.id)
-                    }, schedOpen===doc.id?'Close ↑':'Set days ↓')
+              React.createElement('div',{className:'doc-section'},
+                React.createElement('div',{className:'section-label'},
+                  React.createElement('span',null,'Clinic locations'),
+                  React.createElement('div',{className:'section-actions'},
+                    React.createElement('button',{className:'link-btn',style:{color:isEL?'#991B1B':s.a},onClick:()=>isEL?closeEditLocs():openEditLocs(doc.id)},isEL?'✕ Done':'✎ Edit'),
+                    !isEL&&React.createElement('button',{className:'link-btn',style:{color:s.a},onClick:()=>setSchedOpen(schedOpen===doc.id?null:doc.id)},schedOpen===doc.id?'Close ↑':'Set days ↓')
                   )
                 ),
-
-                /* location chips */
-                React.createElement('div', {className:'loc-tags'},
-                  doc.locs.map(loc =>
-                    React.createElement('span', {key:loc, className:'loc-tag', style:{background:s.bg,color:s.t}},
-                      loc,
-                      !isEditingLocs && doc.sched[loc] ? ' · ' + doc.sched[loc] : '',
-                      isEditingLocs && React.createElement('button', {
-                        className:'loc-tag-rm',
-                        title:'Remove '+loc,
-                        onClick:()=>removeLoc(doc.id, loc)
-                      },'×')
-                    )
+                React.createElement('div',{className:'loc-tags'},doc.locs.map(loc=>
+                  React.createElement('span',{key:loc,className:'loc-tag',style:{background:s.bg,color:s.t}},
+                    loc,
+                    !isEL&&doc.sched[loc]?' · '+doc.sched[loc]:'',
+                    isEL&&React.createElement('button',{className:'loc-tag-rm',title:'Remove '+loc,onClick:()=>removeLoc(doc.id,loc)},'×')
                   )
+                )),
+                isEL&&React.createElement('div',{className:'add-loc-row'},
+                  React.createElement('input',{type:'text',placeholder:'Add location…',value:newLocVal,onChange:e=>setNewLocVal(e.target.value),onKeyDown:e=>e.key==='Enter'&&addLoc(doc.id)}),
+                  React.createElement('button',{onClick:()=>addLoc(doc.id)},'+ Add')
                 ),
-
-                /* add location input (edit mode) */
-                isEditingLocs && React.createElement('div', {className:'add-loc-row'},
-                  React.createElement('input', {
-                    type:'text', placeholder:'Add location…',
-                    value:newLocVal, onChange:e=>setNewLocVal(e.target.value),
-                    onKeyDown:e=>e.key==='Enter'&&addLoc(doc.id)
-                  }),
-                  React.createElement('button', {onClick:()=>addLoc(doc.id),'aria-label':'Add location'}, '+ Add')
-                ),
-
-                /* schedule editor */
-                !isEditingLocs && schedOpen===doc.id && React.createElement('div', {className:'sched-editor'},
-                  doc.locs.map(loc =>
-                    React.createElement('div', {key:loc, className:'sched-loc'},
-                      React.createElement('div', {className:'sched-loc-label'}, loc),
-                      React.createElement('div', {className:'sched-days'},
-                        DAYS.map(day => {
-                          const on = (doc.sched[loc]||'').includes(day);
-                          return React.createElement('button', {
-                            key:day,
-                            className:'day-btn'+(on?' on':''),
-                            style:{background:on?s.a:'#fff',color:on?'#fff':'#6b7280',borderColor:on?s.a:'#d1d5db'},
-                            onClick:()=>toggleSched(doc.id,loc,day)
-                          },day);
-                        })
-                      )
-                    )
-                  )
+                !isEL&&schedOpen===doc.id&&React.createElement('div',{className:'sched-editor'},
+                  doc.locs.map(loc=>React.createElement('div',{key:loc,className:'sched-loc'},
+                    React.createElement('div',{className:'sched-loc-label'},loc),
+                    React.createElement('div',{className:'sched-days'},DAYS.map(day=>{
+                      const on=(doc.sched[loc]||'').includes(day);
+                      return React.createElement('button',{key:day,className:'day-btn'+(on?' on':''),
+                        style:{background:on?s.a:'#fff',color:on?'#fff':'#6b7280',borderColor:on?s.a:'#d1d5db'},
+                        onClick:()=>toggleSched(doc.id,loc,day)},day);
+                    }))
+                  ))
                 )
               ),
-
-              /* team section */
-              React.createElement('div', {className:'doc-team'},
-                React.createElement('div', {className:'team-header'},
-                  React.createElement('span', {className:'team-label'}, 'Team (',dt.length,')'),
-                  React.createElement('span', {className:'team-progress', style:{color: cov.level==='ok'?'#059669':cov.level==='warn'?'#D97706':'#DC2626'}},
-                    dt.length,' / ',cov.target,' needed'
-                  )
+              React.createElement('div',{className:'doc-team'},
+                React.createElement('div',{className:'team-header'},
+                  React.createElement('span',{className:'team-label'},'Team (',dt.length,')'),
+                  React.createElement('span',{className:'team-progress',style:{color:cov.level==='ok'?'#059669':cov.level==='warn'?'#D97706':'#DC2626'}},dt.length,' / ',cov.target,' needed')
                 ),
-                dt.map(tech => {
-                  const {locOk, typeOk, ok} = compat(tech, doc);
-                  const warnings = [];
-                  if (!locOk) warnings.push('Location mismatch — tech is not based nearby and not marked as willing to travel');
-                  if (!typeOk) warnings.push('Clinic type mismatch — tech may not be trained for this specialty');
-                  return React.createElement('div', {
-                    key:tech.id,
-                    className:'tech-chip'+(drag?.techId===tech.id?' dragging':''),
-                    style:{background:ok?'#f9fafb':'#FFFBEB', borderColor:ok?'#e5e7eb':'#FDE68A'},
-                    draggable:true,
-                    onDragStart:e=>onDragStart(e,tech.id,doc.id),
-                    onDragEnd:onDragEnd,
+                dt.map(tech=>{
+                  const{locOk,typeOk,ok}=compat(tech,doc);
+                  const warns=[];
+                  if(!locOk)warns.push('Location mismatch');
+                  if(!typeOk)warns.push('Clinic type mismatch');
+                  return React.createElement('div',{
+                    key:tech.id,className:'tech-chip'+(drag&&drag.techId===tech.id?' dragging':''),
+                    style:{background:ok?'#f9fafb':'#FFFBEB',borderColor:ok?'#e5e7eb':'#FDE68A'},
+                    draggable:true,onDragStart:e=>onDragStart(e,tech.id,doc.id),onDragEnd,
                   },
-                    React.createElement('span',{className:'tech-chip-name'},
-                      tech.name,
-                      tech.cred&&React.createElement('span',{className:'tech-chip-cred'},tech.cred)
-                    ),
+                    React.createElement('span',{className:'tech-chip-name'},tech.name,tech.cred&&React.createElement('span',{className:'tech-chip-cred'},tech.cred)),
                     tech.scribes&&React.createElement('span',{className:'tag tag-scribe',style:{fontSize:9,padding:'1px 5px'}},'scribe'),
-                    !ok&&React.createElement('span',{className:'tag',title:warnings.join(' | '),style:{background:'#FEF3C7',color:'#92400E',cursor:'help',fontSize:9,padding:'1px 6px'}},'⚠ check'),
+                    !ok&&React.createElement('span',{className:'tag',title:warns.join(' | '),style:{background:'#FEF3C7',color:'#92400E',cursor:'help',fontSize:9,padding:'1px 6px'}},'⚠ check'),
                     React.createElement('button',{className:'remove-btn',title:'Remove from team',onClick:()=>removeTech(tech.id)},'×')
                   );
                 }),
-                dt.length===0 && React.createElement('div',{
-                  className:'empty-drop',
-                  style:{color:isTgt?s.a:'#9ca3af',borderColor:isTgt?s.a:'#d1d5db',background:isTgt?s.bg:'transparent'}
-                },isTgt?'↓ Drop to assign':'Drag technicians here'),
-                dt.length>0&&isTgt&&React.createElement('div',{
-                  className:'add-more-drop',
-                  style:{color:s.a,borderColor:s.a}
-                },'↓ Add to team')
+                dt.length===0&&React.createElement('div',{className:'empty-drop',style:{color:isTgt?s.a:'#9ca3af',borderColor:isTgt?s.a:'#d1d5db',background:isTgt?s.bg:'transparent'}},isTgt?'↓ Drop to assign':'Drag technicians here'),
+                dt.length>0&&isTgt&&React.createElement('div',{className:'add-more-drop',style:{color:s.a,borderColor:s.a}},'↓ Add to team')
               )
-            ); // end doc-card
+            );
           })
         )
-      ) // end doctor grid
-    ), // end main
+      )
+    ),
 
     /* LEGEND */
     React.createElement('div',{className:'legend'},
       React.createElement('strong',{style:{color:'#374151'}},'Coverage:'),
-      React.createElement('div',{className:'legend-item'},React.createElement('div',{className:'legend-dot',style:{background:'#DC2626'}}),React.createElement('span',null,'Below minimum (red badge)')),
-      React.createElement('div',{className:'legend-item'},React.createElement('div',{className:'legend-dot',style:{background:'#D97706'}}),React.createElement('span',null,'Between min & ideal (amber)')),
-      React.createElement('div',{className:'legend-item'},React.createElement('div',{className:'legend-dot',style:{background:'#059669'}}),React.createElement('span',null,'Fully covered (green)')),
+      React.createElement('div',{className:'legend-item'},React.createElement('div',{className:'legend-dot',style:{background:'#DC2626'}}),React.createElement('span',null,'Below minimum')),
+      React.createElement('div',{className:'legend-item'},React.createElement('div',{className:'legend-dot',style:{background:'#D97706'}}),React.createElement('span',null,'Below ideal')),
+      React.createElement('div',{className:'legend-item'},React.createElement('div',{className:'legend-dot',style:{background:'#059669'}}),React.createElement('span',null,'Fully covered')),
       React.createElement('span',{style:{color:'#e5e7eb'}},'|'),
-      React.createElement('span',null,'⚠ check = mismatch — hover chip for detail'),
-      React.createElement('span',{style:{color:'#e5e7eb'}},'|'),
-      React.createElement('span',null,'Drag chips between cards to reassign'),
+      React.createElement('span',null,'⚠ check = hover chip for detail'),
       React.createElement('div',{style:{flex:1}}),
-      React.createElement('span',{style:{color:'#d1d5db',fontSize:10}},'Import/Export saves all assignments, schedules & location edits')
+      React.createElement('span',{style:{color:'#d1d5db',fontSize:10}},'Passcode: '+APP_PASSCODE+' · Firestore: '+FS_COL+'/'+FS_DOC)
     ),
 
-    /* TOAST */
-    toast && React.createElement('div',{className:'toast'},toast)
+    toast&&React.createElement('div',{className:'toast'},toast)
   );
-}
-
-/* ─── Root wrapper — handles lock screen, mounts App only after unlock ── */
-function Root() {
-  const [unlocked, setUnlocked] = React.useState(isAlreadyOpen);
-  if (!unlocked) {
-    return React.createElement(LockScreen, { onUnlock: () => setUnlocked(true) });
-  }
-  return React.createElement(App);
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Root));
