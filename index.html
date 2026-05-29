@@ -6,7 +6,7 @@
   <title>Clinic Team Builder — Nevada Eye Associates</title>
   <meta name="description" content="Ophthalmic technician team builder for Nevada Eye Associates / Meadows Eye. Assign techs to doctor teams with drag-and-drop, coverage thresholds, and mismatch warnings." />
   <!--
-    Clinic Team Builder — Meadows Eye
+    Clinic Team Builder — Nevada Eye Associates
     ════════════════════════════════════════════
     Single-file tool. No build step. Works in Chrome.
     To use: open index.html (or this file) in any modern browser.
@@ -515,11 +515,6 @@ function LockScreen({ onUnlock }) {
 
 /* ─── Main App ──────────────────────────────────────────────── */
 function App() {
-  const [unlocked, setUnlocked] = useState(isAlreadyOpen);
-
-  // Show lock screen until correct passcode entered
-  if (!unlocked) return React.createElement(LockScreen, { onUnlock: () => setUnlocked(true) });
-
   const _saved = loadSaved();
   const [docs,       setDocs]       = useState(_saved.docs  || DOCS_SEED);
   const [techs,      setTechs]      = useState(_saved.techs || TECHS_SEED);
@@ -1110,7 +1105,16 @@ function App() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
+/* ─── Root wrapper — handles lock screen, mounts App only after unlock ── */
+function Root() {
+  const [unlocked, setUnlocked] = React.useState(isAlreadyOpen);
+  if (!unlocked) {
+    return React.createElement(LockScreen, { onUnlock: () => setUnlocked(true) });
+  }
+  return React.createElement(App);
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(Root));
 </script>
 </body>
 </html>
