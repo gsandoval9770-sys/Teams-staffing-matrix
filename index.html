@@ -7,7 +7,6 @@
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -200,6 +199,20 @@ const APP_PASSCODE  = 'meadows1';
 const UNLOCK_KEY    = 'neya-unlocked';
 
 /* Firebase config — already filled in with your project */
+/*
+  FIRESTORE RULES — paste in Firebase Console → Firestore → Rules → Publish:
+  ───────────────────────────────────────────────────────────────────────────
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
+      match /teamBuilder/{doc} {
+        allow read, write: if true;
+      }
+    }
+  }
+  ───────────────────────────────────────────────────────────────────────────
+  No sign-in needed. The app passcode is the only access control.
+*/
 const FB_CFG = {
   apiKey:            'AIzaSyBk5CZtGdTA9O2id_C_QCoi3Jp72uKK_r0',
   authDomain:        'team-builder-73ec4.firebaseapp.com',
@@ -222,18 +235,17 @@ function isOpen()  { return localStorage.getItem(UNLOCK_KEY)==='1' || sessionSto
 /* ══════════════════════════════════════════════════════════════
    Firebase init (safe to call multiple times)
    ══════════════════════════════════════════════════════════════ */
-let _db=null, _auth=null;
+let _db=null;
 function getFB() {
-  if (_db && _auth) return true;
+  if (_db) return true;
   if (!window.firebase) return false;
   try {
     if (!firebase.apps.length) firebase.initializeApp(FB_CFG);
-    _db   = firebase.firestore();
-    _auth = firebase.auth();
+    _db = firebase.firestore();
     _db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
     return true;
   } catch(e) {
-    if (e.code==='app/duplicate-app') { _db=firebase.firestore(); _auth=firebase.auth(); return true; }
+    if (e.code==='app/duplicate-app') { _db=firebase.firestore(); return true; }
     return false;
   }
 }
@@ -430,33 +442,29 @@ function App(){
   const [newLocVal, setNewLocVal] = useState('');
   const [newT,      setNewT]      = useState({name:'',cred:'',l1:'',l2:'',l3:'',types:[],travel:false,scribes:false});
   const [toast,     setToast]     = useState('');
-  const [gUser,     setGUser]     = useState(null);
-  const [syncStatus,setSyncStatus]= useState('offline');
+  const [syncStatus,setSyncStatus]= useState('connecting');
   const [lastBy,    setLastBy]    = useState(null);
 
   const fileRef      = useRef(null);
   const syncTimer    = useRef(null);
   const isSaving     = useRef(false);
   const unsubListen  = useRef(null);
-  const unsubAuth    = useRef(null);
 
   /* toast */
   const showToast = useCallback(msg=>{ setToast(msg); setTimeout(()=>setToast(''),2800); },[]);
 
-  /* save to localStorage + Firestore */
+  /* save to localStorage + Firestore (no auth needed) */
   function persist(nextDocs,nextTechs){
     lsSave({docs:nextDocs,techs:nextTechs});
-    if(!_auth||!_auth.currentUser) return;
+    if(!_db){ return; }
     setSyncStatus('syncing');
     clearTimeout(syncTimer.current);
     syncTimer.current=setTimeout(async()=>{
       try{
         isSaving.current=true;
-        const u=_auth.currentUser;
         await _db.collection(FS_COL).doc(FS_DOC).set({
-          docs:nextDocs,techs:nextTechs,
+          docs:nextDocs, techs:nextTechs,
           updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
-          updatedByUid:u.uid, updatedByName:u.displayName||u.email,
         });
         setSyncStatus('synced');
       } catch(e){ isSaving.current=false; setSyncStatus('error'); }
@@ -471,20 +479,21 @@ function App(){
     setTechs(prev=>{ const next=typeof fn==='function'?fn(prev):fn; persist(docs,next); return next; });
   }
 
-  /* Firestore listener */
-  const attachListener = useCallback(user=>{
+  /* Firestore real-time listener — auto-connects, no sign-in needed */
+  const attachListener = useCallback(()=>{
     if(unsubListen.current){ unsubListen.current(); unsubListen.current=null; }
     const ref=_db.collection(FS_COL).doc(FS_DOC);
     unsubListen.current=ref.onSnapshot(snap=>{
       if(!snap.exists){
+        // First run — upload local data to Firestore
         const s=lsLoad();
         isSaving.current=true;
-        ref.set({docs:s.docs||DOCS_SEED,techs:s.techs||TECHS_SEED,
+        ref.set({
+          docs:s.docs||DOCS_SEED, techs:s.techs||TECHS_SEED,
           updatedAt:firebase.firestore.FieldValue.serverTimestamp(),
-          updatedByUid:user.uid,updatedByName:user.displayName||user.email,
         }).catch(()=>{ isSaving.current=false; });
         setSyncStatus('synced');
-        showToast('✅ Connected to Firestore — data uploaded.');
+        showToast('✅ Connected to Firestore — data syncing.');
         return;
       }
       if(isSaving.current){ isSaving.current=false; setSyncStatus('synced'); return; }
@@ -492,47 +501,24 @@ function App(){
       if(d.docs&&d.techs){
         setDocs(d.docs); setTechs(d.techs); lsSave({docs:d.docs,techs:d.techs});
         setSyncStatus('synced');
-        if(d.updatedByUid&&d.updatedByUid!==user.uid){
-          const name=d.updatedByName||'Someone';
-          const at=d.updatedAt&&d.updatedAt.toDate?d.updatedAt.toDate().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}):'';
-          setLastBy({name,at}); showToast('🔄 Updated by '+name+(at?' at '+at:''));
-        } else { setLastBy(null); }
+        if(d.updatedAt&&d.updatedAt.toDate){
+          const at=d.updatedAt.toDate().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+          setLastBy({at}); showToast('🔄 Schedule synced at '+at);
+        }
       }
     },()=>setSyncStatus('error'));
   },[showToast]);
 
-  /* auth listener */
+  /* Auto-connect to Firestore on mount — no sign-in required */
   useEffect(()=>{
-    if(!getFB()) return;
-    unsubAuth.current=_auth.onAuthStateChanged(user=>{
-      if(user){
-        setGUser({name:user.displayName,email:user.email,picture:user.photoURL,uid:user.uid});
-        setSyncStatus('connecting');
-        attachListener(user);
-      } else {
-        setGUser(null); setSyncStatus('offline');
-        if(unsubListen.current){ unsubListen.current(); unsubListen.current=null; }
-      }
-    });
+    if(!getFB()){ setSyncStatus('error'); return; }
+    setSyncStatus('connecting');
+    attachListener();
     return ()=>{
-      if(unsubAuth.current) unsubAuth.current();
       if(unsubListen.current) unsubListen.current();
       clearTimeout(syncTimer.current);
     };
   },[attachListener]);
-
-  const handleSignIn = async()=>{
-    if(!getFB()) return;
-    try{ await _auth.signInWithPopup(new firebase.auth.GoogleAuthProvider()); }
-    catch{ showToast('Sign-in failed — please try again.'); }
-  };
-  const handleSignOut = async()=>{
-    clearTimeout(syncTimer.current);
-    if(unsubListen.current){ unsubListen.current(); unsubListen.current=null; }
-    if(_auth) await _auth.signOut();
-    setGUser(null); setLastBy(null); setSyncStatus('offline');
-    showToast('Signed out of Firestore sync.');
-  };
 
   /* derived */
   const pool = techs.filter(t=>
@@ -633,22 +619,15 @@ function App(){
     showToast('Reset to defaults.');
   };
 
-  /* ── Sync button rendering helper ── */
-  const syncBtn = !gUser
-    ? React.createElement('button',{className:'sync-btn sync-offline',onClick:handleSignIn,title:'Sign in with Google to enable real-time sync'},
-        React.createElement('div',{className:'sync-dot dot-offline'}), '🔴 Sign in to sync')
-    : React.createElement('div',{style:{display:'flex',alignItems:'center',gap:6}},
-        React.createElement('button',{
-          className:'sync-btn '+(syncStatus==='syncing'||syncStatus==='connecting'?'sync-syncing':syncStatus==='error'?'sync-error':'sync-connected'),
-          title:'Signed in as '+gUser.email+' — click to sign out',
-          onClick:handleSignOut,
-        },
-          React.createElement('div',{className:'sync-dot '+(syncStatus==='connecting'||syncStatus==='syncing'?'dot-busy':syncStatus==='error'?'dot-error':'dot-ok')}),
-          syncStatus==='connecting'?'🔄 Connecting…':syncStatus==='syncing'?'🔄 Saving…':syncStatus==='error'?'⚠ Sync error':'🟢 Live synced'
-        ),
-        gUser.picture&&React.createElement('img',{src:gUser.picture,style:{width:22,height:22,borderRadius:'50%',border:'2px solid #d1d5db'},title:gUser.email}),
-        React.createElement('span',{className:'sync-user',title:gUser.email},gUser.name||gUser.email)
-      );
+  /* ── Sync status pill (no sign-in needed) ── */
+  const syncPill = React.createElement('div',{
+      className:'sync-btn '+(syncStatus==='syncing'||syncStatus==='connecting'?'sync-syncing':syncStatus==='error'?'sync-error':'sync-connected'),
+      title: syncStatus==='error'?'Firestore connection error — check your internet connection':'Real-time Firestore sync',
+      style:{cursor:'default'},
+    },
+    React.createElement('div',{className:'sync-dot '+(syncStatus==='connecting'||syncStatus==='syncing'?'dot-busy':syncStatus==='error'?'dot-error':'dot-ok')}),
+    syncStatus==='connecting'?'🔄 Connecting…':syncStatus==='syncing'?'🔄 Saving…':syncStatus==='error'?'⚠ Sync error':'🟢 Live synced'
+  );
 
   /* ════════════════════════════════════════════════════════════
      RENDER
@@ -678,7 +657,7 @@ function App(){
       )),
       React.createElement('div',{className:'header-divider'}),
       React.createElement('div',{style:{display:'flex',gap:6,alignItems:'center',flexWrap:'wrap'}},
-        syncBtn,
+        syncPill,
         React.createElement('div',{style:{width:1,height:20,background:'#e5e7eb',margin:'0 2px'}}),
         React.createElement('button',{className:'io-btn',onClick:()=>fileRef.current.click()},'↑ Import'),
         React.createElement('button',{className:'io-btn export-btn',onClick:handleExport},'↓ Export'),
@@ -687,11 +666,9 @@ function App(){
       )
     ),
 
-    /* last-synced-by banner */
-    (gUser&&lastBy)&&React.createElement('div',{className:'sync-banner'},
-      '🔄 Schedule updated by ',
-      React.createElement('strong',null,lastBy.name),
-      lastBy.at?' at '+lastBy.at:'',' — synced in real time.'
+    /* last-synced-at banner */
+    lastBy&&React.createElement('div',{className:'sync-banner'},
+      '🔄 Schedule synced at ',React.createElement('strong',null,lastBy.at),' — all devices are up to date.'
     ),
 
     /* ── MAIN ── */
@@ -853,7 +830,7 @@ function App(){
       React.createElement('span',{style:{color:'#e5e7eb'}},'|'),
       React.createElement('span',null,'⚠ check = hover chip for detail'),
       React.createElement('div',{style:{flex:1}}),
-      React.createElement('span',{style:{color:'#d1d5db',fontSize:10}},'Passcode: '+APP_PASSCODE+' · Firestore: '+FS_COL+'/'+FS_DOC)
+      React.createElement('span',{style:{color:'#d1d5db',fontSize:10}},'🟢 Live Firestore sync · '+FS_COL+'/'+FS_DOC)
     ),
 
     toast&&React.createElement('div',{className:'toast'},toast)
